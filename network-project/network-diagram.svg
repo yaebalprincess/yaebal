@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="640" viewBox="0 0 1120 640">
+<rect width="100%" height="100%" fill="white"/>
+<text x="40" y="25" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="18" font-weight="700" fill="#17334D">СЕТЕВОЙ ГРАФИК · НОВЫЙ ДЕПОЗИТНЫЙ СЧЁТ</text>
+<path d="M 98 145 L 192 145" fill="none" stroke="#C43D46" stroke-width="3"/>
+<polygon points="192,145 180.0,140.0 180.0,150.0" fill="#C43D46"/>
+<rect x="101.30859375" y="109" width="87.3828125" height="21" fill="white"/>
+<text x="145" y="126" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">A1 · 30 дн.</text>
+<path d="M 70 117 C 70 38 370 38 370 117" fill="none" stroke="#187F89" stroke-width="2.3"/>
+<polygon points="370,117 375.0,105.0 365.0,105.0" fill="#187F89"/>
+<rect x="176.30859375" y="43" width="87.3828125" height="21" fill="white"/>
+<text x="220" y="60" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#187F89">A2 · 21 дн.</text>
+<path d="M 398 145 L 492 145" fill="none" stroke="#C43D46" stroke-width="3"/>
+<polygon points="492,145 480.0,140.0 480.0,150.0" fill="#C43D46"/>
+<rect x="405.76220703125" y="109" width="78.4755859375" height="21" fill="white"/>
+<text x="445" y="126" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">A3 · 2 дн.</text>
+<path d="M 548 145 L 642 145" fill="none" stroke="#C43D46" stroke-width="3"/>
+<polygon points="642,145 630.0,140.0 630.0,150.0" fill="#C43D46"/>
+<rect x="555.76220703125" y="109" width="78.4755859375" height="21" fill="white"/>
+<text x="595" y="126" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">A4 · 2 дн.</text>
+<path d="M 698 145 L 792 145" fill="none" stroke="#C43D46" stroke-width="3"/>
+<polygon points="792,145 780.0,140.0 780.0,150.0" fill="#C43D46"/>
+<rect x="705.76220703125" y="109" width="78.4755859375" height="21" fill="white"/>
+<text x="745" y="126" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">A5 · 5 дн.</text>
+<path d="M 848 145 L 942 145" fill="none" stroke="#C43D46" stroke-width="3"/>
+<polygon points="942,145 930.0,140.0 930.0,150.0" fill="#C43D46"/>
+<rect x="855.76220703125" y="109" width="78.4755859375" height="21" fill="white"/>
+<text x="895" y="126" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">A6 · 7 дн.</text>
+<path d="M 970 173 L 970 292" fill="none" stroke="#C43D46" stroke-width="3"/>
+<polygon points="970,292 975.0,280.0 965.0,280.0" fill="#C43D46"/>
+<rect x="986.30859375" y="225" width="87.3828125" height="21" fill="white"/>
+<text x="1030" y="242" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">A7 · 20 дн.</text>
+<path d="M 949 164 L 805 301" fill="none" stroke="#187F89" stroke-width="2.3"/>
+<polygon points="805,301 817.1403522765323,296.3511456678343 810.2475704203993,289.10617787744616" fill="#187F89"/>
+<rect x="869.30859375" y="244" width="87.3828125" height="21" fill="white"/>
+<text x="913" y="261" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#187F89">A8 · 14 дн.</text>
+<path d="M 943 152 C 830 225 600 200 600 292" fill="none" stroke="#187F89" stroke-width="2.3"/>
+<polygon points="600,292 605.0,280.0 595.0,280.0" fill="#187F89"/>
+<rect x="677.76220703125" y="194" width="78.4755859375" height="21" fill="white"/>
+<text x="717" y="211" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#187F89">A9 · 7 дн.</text>
+<path d="M 970 348 L 970 472" fill="none" stroke="#C43D46" stroke-width="3"/>
+<polygon points="970,472 975.0,460.0 965.0,460.0" fill="#C43D46"/>
+<rect x="987.30859375" y="400" width="87.3828125" height="21" fill="white"/>
+<text x="1031" y="417" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">A10 · 1 дн.</text>
+<path d="M 600 348 L 600 472" fill="none" stroke="#187F89" stroke-width="2.3"/>
+<polygon points="600,472 605.0,460.0 595.0,460.0" fill="#187F89"/>
+<rect x="620.30859375" y="400" width="87.3828125" height="21" fill="white"/>
+<text x="664" y="417" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#187F89">A11 · 2 дн.</text>
+<path d="M 572 500 L 398 500" fill="none" stroke="#C43D46" stroke-width="3"/>
+<polygon points="398,500 410.0,505.0 410.0,495.0" fill="#C43D46"/>
+<rect x="441.30859375" y="464" width="87.3828125" height="21" fill="white"/>
+<text x="485" y="481" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">A12 · 1 дн.</text>
+<path d="M 342 500 L 198 500" fill="none" stroke="#C43D46" stroke-width="3"/>
+<polygon points="198,500 210.0,505.0 210.0,495.0" fill="#C43D46"/>
+<rect x="226.30859375" y="464" width="87.3828125" height="21" fill="white"/>
+<text x="270" y="481" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">A13 · 0 дн.</text>
+<path d="M 248 145 L 342 145" fill="none" stroke="#C43D46" stroke-width="3" stroke-dasharray="8 6"/>
+<polygon points="342,145 330.0,140.0 330.0,150.0" fill="#C43D46"/>
+<rect x="255.93310546875" y="109" width="78.1337890625" height="21" fill="white"/>
+<text x="295" y="126" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">φ1 · 0 дн.</text>
+<path d="M 757 320 L 628 320" fill="none" stroke="#187F89" stroke-width="2.3" stroke-dasharray="8 6"/>
+<polygon points="628,320 640.0,325.0 640.0,315.0" fill="#187F89"/>
+<rect x="653.93310546875" y="285" width="78.1337890625" height="21" fill="white"/>
+<text x="693" y="302" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#187F89">φ2 · 0 дн.</text>
+<path d="M 942 500 L 628 500" fill="none" stroke="#C43D46" stroke-width="3" stroke-dasharray="8 6"/>
+<polygon points="628,500 640.0,505.0 640.0,495.0" fill="#C43D46"/>
+<rect x="745.93310546875" y="464" width="78.1337890625" height="21" fill="white"/>
+<text x="785" y="481" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">φ3 · 0 дн.</text>
+<circle cx="70" cy="145" r="28" fill="white" stroke="#C43D46" stroke-width="2.5"/>
+<path d="M 43 146 L 97 146" fill="none" stroke="#C43D46" stroke-width="1"/>
+<path d="M 70 146 L 70 172" fill="none" stroke="#C43D46" stroke-width="1"/>
+<text x="70" y="138" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#C43D46">1</text>
+<text x="57" y="164" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">0</text>
+<text x="83" y="164" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">0</text>
+<circle cx="220" cy="145" r="28" fill="white" stroke="#C43D46" stroke-width="2.5"/>
+<path d="M 193 146 L 247 146" fill="none" stroke="#C43D46" stroke-width="1"/>
+<path d="M 220 146 L 220 172" fill="none" stroke="#C43D46" stroke-width="1"/>
+<text x="220" y="138" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#C43D46">2</text>
+<text x="207" y="164" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">30</text>
+<text x="233" y="164" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">30</text>
+<circle cx="370" cy="145" r="28" fill="white" stroke="#C43D46" stroke-width="2.5"/>
+<path d="M 343 146 L 397 146" fill="none" stroke="#C43D46" stroke-width="1"/>
+<path d="M 370 146 L 370 172" fill="none" stroke="#C43D46" stroke-width="1"/>
+<text x="370" y="138" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#C43D46">3</text>
+<text x="357" y="164" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">30</text>
+<text x="383" y="164" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">30</text>
+<circle cx="520" cy="145" r="28" fill="white" stroke="#C43D46" stroke-width="2.5"/>
+<path d="M 493 146 L 547 146" fill="none" stroke="#C43D46" stroke-width="1"/>
+<path d="M 520 146 L 520 172" fill="none" stroke="#C43D46" stroke-width="1"/>
+<text x="520" y="138" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#C43D46">4</text>
+<text x="507" y="164" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">32</text>
+<text x="533" y="164" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">32</text>
+<circle cx="670" cy="145" r="28" fill="white" stroke="#C43D46" stroke-width="2.5"/>
+<path d="M 643 146 L 697 146" fill="none" stroke="#C43D46" stroke-width="1"/>
+<path d="M 670 146 L 670 172" fill="none" stroke="#C43D46" stroke-width="1"/>
+<text x="670" y="138" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#C43D46">5</text>
+<text x="657" y="164" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">34</text>
+<text x="683" y="164" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">34</text>
+<circle cx="820" cy="145" r="28" fill="white" stroke="#C43D46" stroke-width="2.5"/>
+<path d="M 793 146 L 847 146" fill="none" stroke="#C43D46" stroke-width="1"/>
+<path d="M 820 146 L 820 172" fill="none" stroke="#C43D46" stroke-width="1"/>
+<text x="820" y="138" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#C43D46">6</text>
+<text x="807" y="164" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">39</text>
+<text x="833" y="164" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">39</text>
+<circle cx="970" cy="145" r="28" fill="white" stroke="#C43D46" stroke-width="2.5"/>
+<path d="M 943 146 L 997 146" fill="none" stroke="#C43D46" stroke-width="1"/>
+<path d="M 970 146 L 970 172" fill="none" stroke="#C43D46" stroke-width="1"/>
+<text x="970" y="138" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#C43D46">7</text>
+<text x="957" y="164" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">46</text>
+<text x="983" y="164" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">46</text>
+<circle cx="970" cy="320" r="28" fill="white" stroke="#C43D46" stroke-width="2.5"/>
+<path d="M 943 321 L 997 321" fill="none" stroke="#C43D46" stroke-width="1"/>
+<path d="M 970 321 L 970 347" fill="none" stroke="#C43D46" stroke-width="1"/>
+<text x="970" y="313" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#C43D46">8</text>
+<text x="957" y="339" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">66</text>
+<text x="983" y="339" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">66</text>
+<circle cx="785" cy="320" r="28" fill="white" stroke="#187F89" stroke-width="2.5"/>
+<path d="M 758 321 L 812 321" fill="none" stroke="#187F89" stroke-width="1"/>
+<path d="M 785 321 L 785 347" fill="none" stroke="#187F89" stroke-width="1"/>
+<text x="785" y="313" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#187F89">9</text>
+<text x="772" y="339" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#187F89">60</text>
+<text x="798" y="339" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#187F89">65</text>
+<circle cx="600" cy="320" r="28" fill="white" stroke="#187F89" stroke-width="2.5"/>
+<path d="M 573 321 L 627 321" fill="none" stroke="#187F89" stroke-width="1"/>
+<path d="M 600 321 L 600 347" fill="none" stroke="#187F89" stroke-width="1"/>
+<text x="600" y="313" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#187F89">10</text>
+<text x="587" y="339" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#187F89">60</text>
+<text x="613" y="339" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#187F89">65</text>
+<circle cx="970" cy="500" r="28" fill="white" stroke="#C43D46" stroke-width="2.5"/>
+<path d="M 943 501 L 997 501" fill="none" stroke="#C43D46" stroke-width="1"/>
+<path d="M 970 501 L 970 527" fill="none" stroke="#C43D46" stroke-width="1"/>
+<text x="970" y="493" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#C43D46">11</text>
+<text x="957" y="519" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">67</text>
+<text x="983" y="519" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">67</text>
+<circle cx="600" cy="500" r="28" fill="white" stroke="#C43D46" stroke-width="2.5"/>
+<path d="M 573 501 L 627 501" fill="none" stroke="#C43D46" stroke-width="1"/>
+<path d="M 600 501 L 600 527" fill="none" stroke="#C43D46" stroke-width="1"/>
+<text x="600" y="493" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#C43D46">12</text>
+<text x="587" y="519" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">67</text>
+<text x="613" y="519" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">67</text>
+<circle cx="370" cy="500" r="28" fill="white" stroke="#C43D46" stroke-width="2.5"/>
+<path d="M 343 501 L 397 501" fill="none" stroke="#C43D46" stroke-width="1"/>
+<path d="M 370 501 L 370 527" fill="none" stroke="#C43D46" stroke-width="1"/>
+<text x="370" y="493" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#C43D46">13</text>
+<text x="357" y="519" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">68</text>
+<text x="383" y="519" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">68</text>
+<circle cx="170" cy="500" r="28" fill="white" stroke="#C43D46" stroke-width="2.5"/>
+<path d="M 143 501 L 197 501" fill="none" stroke="#C43D46" stroke-width="1"/>
+<path d="M 170 501 L 170 527" fill="none" stroke="#C43D46" stroke-width="1"/>
+<text x="170" y="493" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="17" font-weight="700" fill="#C43D46">14</text>
+<text x="157" y="519" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">68</text>
+<text x="183" y="519" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#C43D46">68</text>
+<text x="65" y="292" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="22" font-weight="700" fill="#C43D46">Критический путь — 68 дней</text>
+<text x="65" y="330" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="400" fill="#17334D">1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →</text>
+<text x="65" y="357" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="16" font-weight="400" fill="#17334D">11 → 12 → 13 → 14</text>
+<text x="65" y="397" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#566779">В круге: номер события / ранний | поздний срок.</text>
+<text x="65" y="422" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#566779">Время отсчитывается от события 1; Tр(1) = 0.</text>
+<path d="M 65 570 L 110 570" fill="none" stroke="#C43D46" stroke-width="2.5"/>
+<polygon points="110,570 98.0,565.0 98.0,575.0" fill="#C43D46"/>
+<text x="124" y="575" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#17334D">Критические работы и связи</text>
+<path d="M 550 570 L 595 570" fill="none" stroke="#187F89" stroke-width="2.5" stroke-dasharray="8 6"/>
+<polygon points="595,570 583.0,565.0 583.0,575.0" fill="#187F89"/>
+<text x="609" y="575" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#17334D">Фиктивные связи φ1–φ3: 0 дней</text>
+<text x="65" y="611" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="14" font-weight="400" fill="#566779">A1–A13 — работы из исходной таблицы; красный цвет означает нулевой полный резерв.</text>
+</svg>

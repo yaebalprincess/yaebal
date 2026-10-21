@@ -1,0 +1,338 @@
+{
+  "duration": 68,
+  "events": {
+    "1": {
+      "early": 0,
+      "late": 0
+    },
+    "2": {
+      "early": 30,
+      "late": 30
+    },
+    "3": {
+      "early": 30,
+      "late": 30
+    },
+    "4": {
+      "early": 32,
+      "late": 32
+    },
+    "5": {
+      "early": 34,
+      "late": 34
+    },
+    "6": {
+      "early": 39,
+      "late": 39
+    },
+    "7": {
+      "early": 46,
+      "late": 46
+    },
+    "8": {
+      "early": 66,
+      "late": 66
+    },
+    "9": {
+      "early": 60,
+      "late": 65
+    },
+    "10": {
+      "early": 60,
+      "late": 65
+    },
+    "11": {
+      "early": 67,
+      "late": 67
+    },
+    "12": {
+      "early": 67,
+      "late": 67
+    },
+    "13": {
+      "early": 68,
+      "late": 68
+    },
+    "14": {
+      "early": 68,
+      "late": 68
+    }
+  },
+  "activities": {
+    "A1": {
+      "i": 1,
+      "j": 2,
+      "duration": 30,
+      "ES": 0,
+      "EF": 30,
+      "LS": 0,
+      "LF": 30,
+      "total_float": 0,
+      "free_float": 0
+    },
+    "A2": {
+      "i": 1,
+      "j": 3,
+      "duration": 21,
+      "ES": 0,
+      "EF": 21,
+      "LS": 9,
+      "LF": 30,
+      "total_float": 9,
+      "free_float": 9
+    },
+    "A3": {
+      "i": 3,
+      "j": 4,
+      "duration": 2,
+      "ES": 30,
+      "EF": 32,
+      "LS": 30,
+      "LF": 32,
+      "total_float": 0,
+      "free_float": 0
+    },
+    "A4": {
+      "i": 4,
+      "j": 5,
+      "duration": 2,
+      "ES": 32,
+      "EF": 34,
+      "LS": 32,
+      "LF": 34,
+      "total_float": 0,
+      "free_float": 0
+    },
+    "A5": {
+      "i": 5,
+      "j": 6,
+      "duration": 5,
+      "ES": 34,
+      "EF": 39,
+      "LS": 34,
+      "LF": 39,
+      "total_float": 0,
+      "free_float": 0
+    },
+    "A6": {
+      "i": 6,
+      "j": 7,
+      "duration": 7,
+      "ES": 39,
+      "EF": 46,
+      "LS": 39,
+      "LF": 46,
+      "total_float": 0,
+      "free_float": 0
+    },
+    "A7": {
+      "i": 7,
+      "j": 8,
+      "duration": 20,
+      "ES": 46,
+      "EF": 66,
+      "LS": 46,
+      "LF": 66,
+      "total_float": 0,
+      "free_float": 0
+    },
+    "A8": {
+      "i": 7,
+      "j": 9,
+      "duration": 14,
+      "ES": 46,
+      "EF": 60,
+      "LS": 51,
+      "LF": 65,
+      "total_float": 5,
+      "free_float": 0
+    },
+    "A9": {
+      "i": 7,
+      "j": 10,
+      "duration": 7,
+      "ES": 46,
+      "EF": 53,
+      "LS": 58,
+      "LF": 65,
+      "total_float": 12,
+      "free_float": 7
+    },
+    "A10": {
+      "i": 8,
+      "j": 11,
+      "duration": 1,
+      "ES": 66,
+      "EF": 67,
+      "LS": 66,
+      "LF": 67,
+      "total_float": 0,
+      "free_float": 0
+    },
+    "A11": {
+      "i": 10,
+      "j": 12,
+      "duration": 2,
+      "ES": 60,
+      "EF": 62,
+      "LS": 65,
+      "LF": 67,
+      "total_float": 5,
+      "free_float": 5
+    },
+    "A12": {
+      "i": 12,
+      "j": 13,
+      "duration": 1,
+      "ES": 67,
+      "EF": 68,
+      "LS": 67,
+      "LF": 68,
+      "total_float": 0,
+      "free_float": 0
+    },
+    "A13": {
+      "i": 13,
+      "j": 14,
+      "duration": 0,
+      "ES": 68,
+      "EF": 68,
+      "LS": 68,
+      "LF": 68,
+      "total_float": 0,
+      "free_float": 0
+    },
+    "φ1": {
+      "i": 2,
+      "j": 3,
+      "duration": 0,
+      "ES": 30,
+      "EF": 30,
+      "LS": 30,
+      "LF": 30,
+      "total_float": 0,
+      "free_float": 0
+    },
+    "φ2": {
+      "i": 9,
+      "j": 10,
+      "duration": 0,
+      "ES": 60,
+      "EF": 60,
+      "LS": 65,
+      "LF": 65,
+      "total_float": 5,
+      "free_float": 0
+    },
+    "φ3": {
+      "i": 11,
+      "j": 12,
+      "duration": 0,
+      "ES": 67,
+      "EF": 67,
+      "LS": 67,
+      "LF": 67,
+      "total_float": 0,
+      "free_float": 0
+    }
+  },
+  "paths": [
+    {
+      "events": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        11,
+        12,
+        13,
+        14
+      ],
+      "duration": 68
+    },
+    {
+      "events": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        9,
+        10,
+        12,
+        13,
+        14
+      ],
+      "duration": 63
+    },
+    {
+      "events": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        11,
+        12,
+        13,
+        14
+      ],
+      "duration": 59
+    },
+    {
+      "events": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        10,
+        12,
+        13,
+        14
+      ],
+      "duration": 56
+    },
+    {
+      "events": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        9,
+        10,
+        12,
+        13,
+        14
+      ],
+      "duration": 54
+    },
+    {
+      "events": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        10,
+        12,
+        13,
+        14
+      ],
+      "duration": 47
+    }
+  ]
+}
