@@ -1,0 +1,4 @@
+{ Пример корректного входного текста }
+a := not (b and 1) or c xor 0;
+flag := a and not b;
+result := (x or y) and (not z xor 1)

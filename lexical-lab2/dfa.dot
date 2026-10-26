@@ -1,0 +1,35 @@
+digraph Variant6Lexer {
+  graph [rankdir=LR, bgcolor="white", pad="0.2", nodesep="0.35", ranksep="0.65", labelloc=t,
+         label="ДКА выделения лексем варианта 6", fontname="DejaVu Sans", fontsize=18];
+  node [shape=circle, fontname="DejaVu Sans", fontsize=11, style=filled, fillcolor="#EDF3F7", color="#17334D"];
+  edge [fontname="DejaVu Sans", fontsize=9, color="#187F89"];
+  start [shape=point, label="", width=0.1];
+  q0 [label="q0\nначало", fillcolor="#DDECF0"];
+  qid [label="qID\nидентификатор", shape=doublecircle, fillcolor="#DDF2E7"];
+  qnum [label="qNUM\n0 или 1", shape=doublecircle, fillcolor="#DDF2E7"];
+  qbadnum [label="qBAD\nнедопустимое\nчисло", color="#C43D46", fillcolor="#FBE6E6"];
+  qcolon [label="q:\nпосле ':'"];
+  qassign [label="q:=", shape=doublecircle, fillcolor="#DDF2E7"];
+  qcomment [label="qCOM\nкомментарий"];
+  qsemi [label="qSEP", shape=doublecircle, fillcolor="#DDF2E7"];
+  qparen [label="qPAR", shape=doublecircle, fillcolor="#DDF2E7"];
+  error [label="ER", shape=doublecircle, color="#C43D46", fillcolor="#FBE6E6"];
+  start -> q0;
+  q0 -> qid [label="A–Z, a–z"];
+  qid -> qid [label="буква, цифра, _"];
+  q0 -> qnum [label="0, 1"];
+  qnum -> qbadnum [label="цифра / буква / _"];
+  q0 -> qbadnum [label="2–9"];
+  qbadnum -> qbadnum [label="цифра, буква, _"];
+  q0 -> qcolon [label=":"];
+  qcolon -> qassign [label="="];
+  qcolon -> error [label="иначе"];
+  q0 -> qcomment [label="{"];
+  qcomment -> qcomment [label="любой символ кроме }" , color="#8A6D3B"];
+  qcomment -> q0 [label="}", color="#8A6D3B"];
+  q0 -> qsemi [label=";"];
+  q0 -> qparen [label="(", color="#187F89"];
+  q0 -> qparen [label=")", color="#187F89"];
+  q0 -> error [label="прочее"];
+  error -> error [label="любой символ", color="#C43D46"];
+}
