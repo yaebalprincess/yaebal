@@ -1,3 +1,17 @@
+# Smart Order · Liquid Glass v4
+
+Персонализация шрифтов и фона, единая шапка и масштаб во всех вкладках, живые прозрачные диалоги со скруглением и новая инструкция.
+
+- [Скачать полный архив v4](./SmartOrder_LiquidGlass_v4_source.zip?raw=true)
+- [Исходники, запуск и снимки экранов](./SmartOrder_LiquidGlass_v4/README.md)
+- [Руководство пользователя — PDF](./SmartOrder_LiquidGlass_v4/docs/SmartOrder_User_Guide_v4.pdf)
+- [57 успешных проверок и ограничения Windows](./SmartOrder_LiquidGlass_v4/LIQUID_GLASS_V4_QA.md)
+
+Предпросмотр: `PREVIEW_LIQUID_GLASS.cmd` (Python 3.12 x64). Для рабочего запуска — `main.py` и прежняя общая база.
+Изменения выложены исходниками; отрисовку на целевом Windows-ПК необходимо проверить.
+
+---
+
 # Smart Order · Liquid Glass v3
 
 Единый стеклянный стиль главного экрана, редактора наряда, всех вкладок и вложенных окон.
