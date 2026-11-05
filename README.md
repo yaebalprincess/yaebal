@@ -1,3 +1,16 @@
+# Smart Order · Liquid Glass v5
+
+Персонализация профиля в отдельной вкладке после аналитики, прежние окна входа и первого запуска, расписание тем, два варианта «О приложении» и исправления диалогов.
+
+- [Скачать SmartOrder v5 — ZIP исходников](https://github.com/yaebalprincess/yaebal/archive/refs/heads/smartorder-liquid-glass-v5.zip)
+- [Исходники и запуск](https://github.com/yaebalprincess/yaebal/tree/smartorder-liquid-glass-v5)
+- [Руководство пользователя — PDF](https://github.com/yaebalprincess/yaebal/blob/smartorder-liquid-glass-v5/docs/SmartOrder_User_Guide_v5.pdf)
+- [Проверки и ограничения](https://github.com/yaebalprincess/yaebal/blob/smartorder-liquid-glass-v5/LIQUID_GLASS_V5_QA.md)
+
+Архив содержит только приложение, инструкцию и примеры экранов. Готового Windows EXE в нём нет. Для прежней GIF-анимации сохраните папку `resources` из установленной программы. Инструкция запуска и сборки находится внутри архива.
+
+---
+
 # Smart Order · Liquid Glass v4
 
 Персонализация шрифтов и фона, единая шапка и масштаб во всех вкладках, живые прозрачные диалоги со скруглением и новая инструкция.
