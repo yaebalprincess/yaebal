@@ -1,3 +1,21 @@
+# Smart Order · Liquid Glass v6
+
+- [Скачать SmartOrder v6 — ZIP исходников](https://github.com/yaebalprincess/yaebal/archive/refs/heads/smartorder-liquid-glass-v6.zip)
+- [Исходники, запуск и изменения](https://github.com/yaebalprincess/yaebal/tree/smartorder-liquid-glass-v6)
+- [Руководство пользователя — PDF](https://github.com/yaebalprincess/yaebal/blob/smartorder-liquid-glass-v6/docs/SmartOrder_User_Guide_v6.pdf)
+- [Проверки и ограничения](https://github.com/yaebalprincess/yaebal/blob/smartorder-liquid-glass-v6/LIQUID_GLASS_V6_QA.md)
+
+Изменяемая ширина столбцов, подсказки пустых таблиц, три языка персонализации,
+локальный масштаб вкладок и переключение цеха без пересоздания главного окна.
+В аналитике масштаб отключён. Исправлены переключатель темы, кнопки сотрудников,
+заголовок и флажки создания пользователя, колокольчик и нижний блок «О приложении».
+
+Это исходники со скриптами сборки, без готового Windows EXE. Сохраните папку
+`resources` своей установки. Пять фотографий цехов в архив не включены;
+сопоставление имён файлов и поиск в `resources` уже реализованы. Подробности в README архива.
+
+---
+
 # Smart Order · Liquid Glass v5
 
 Персонализация профиля в отдельной вкладке после аналитики, прежние окна входа и первого запуска, расписание тем, два варианта «О приложении» и исправления диалогов.
