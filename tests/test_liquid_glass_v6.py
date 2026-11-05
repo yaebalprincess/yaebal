@@ -6,6 +6,7 @@ from PyQt5.QtCore import QEvent, QPoint, Qt
 from PyQt5.QtGui import QColor, QImage
 from PyQt5.QtWidgets import QApplication, QLabel, QPushButton
 from smartorder.config import SettingsStore, UiSettings
+from smartorder.appearance_config import normalize_appearance
 from smartorder.heavy_ui import AnimatedToggle, UserDialog
 from smartorder.i18n import source_text, set_language
 from smartorder.workspace_ui import WORKSHOP_PHOTOS, WorkshopLoadingDialog, workshop_photo_path, workshop_picture
@@ -37,6 +38,8 @@ def test_zoom_is_local_and_not_applied_while_dragging(glass,app,monkeypatch):
     window.zoom.setSliderDown(False);window._rc18_commit_zoom();app.processEvents()
     assert not calls and app.styleSheet()==baseline
     assert window.ui_settings.zoom==140
+    add=next(b for b in window.tabs.currentWidget().findChildren(QPushButton) if b.property("alignedAction")=="add")
+    assert add.font().pixelSize()==round(normalize_appearance(window.ui_settings.appearance)["fonts"]["buttons"]["size"]*1.4)
     window.tabs.setCurrentIndex(4);app.processEvents()
     assert window.zoom_message.isVisible() and not window.zoom.isVisible()
     assert window.zoom_message.text()=="В данной вкладке функция масштаба недоступна"

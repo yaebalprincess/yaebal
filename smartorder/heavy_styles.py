@@ -70,7 +70,7 @@ def apply_apple_design(root=None, theme: str = "light", zoom: int = 100) -> None
     app=QApplication.instance()
     if app is not None:
         # Setting an identical application stylesheet still re-polishes every
-        # widget, including hidden combo containers. Do it only when zoom changes.
+        # widget, including hidden combo containers. Change it only for new fonts.
         appearance = appearance_of(root)
         key = json.dumps(appearance, sort_keys=True)
         changed = getattr(app, "_smartorder_stylesheet_key", None) != key

@@ -129,7 +129,7 @@ class TitleBar(QFrame):
         row.addWidget(owner.theme_caption)
         row.addWidget(owner.theme)
         row.addSpacing(20)
-        self.badge=QPushButton(f"{owner.user.username}  ·  {WORKSHOPS[owner.workshop]}  ▾");self.badge.setObjectName("UserWorkshopBadge");self.badge.setProperty("symbolIcon", "user");self.badge.setIcon(symbol_icon("user", owner.ui_settings.theme));self.badge.setToolTip(f"{owner.user.role}\nНажмите, чтобы выбрать цех");self.badge.clicked.connect(owner.choose_workshop);self.badge.setEnabled(not any(role in ANALYTICS_ONLY_ROLES for role in split_roles(owner.user.role)));row.addWidget(self.badge)
+        self.badge=QPushButton(f"{owner.user.username}  ·  {tr(WORKSHOPS[owner.workshop])}  ▾");self.badge.setObjectName("UserWorkshopBadge");self.badge.setProperty("symbolIcon", "user");self.badge.setIcon(symbol_icon("user", owner.ui_settings.theme));self.badge.setToolTip(f"{owner.user.role}\nНажмите, чтобы выбрать цех");self.badge.clicked.connect(owner.choose_workshop);self.badge.setEnabled(not any(role in ANALYTICS_ONLY_ROLES for role in split_roles(owner.user.role)));row.addWidget(self.badge)
         row.addSpacing(8)
         self.controls=[]
         for kind,callback in [("min",owner.showMinimized),("max",self.toggle_max),("close",owner.close)]:
@@ -822,6 +822,7 @@ class MainWindow(RC18MainWindow):
     def _switch_to_workshop(self,key):
         if key==self.workshop or getattr(self,"_workshop_switching",False) or key not in allowed_workshops(self.user):return self
         from .workspace_ui import WorkshopLoadingDialog
+        QApplication.instance()._smartorder_main_window=self
         self._workshop_switching=True;self._workshop_loading=WorkshopLoadingDialog(key,self);self._workshop_loading.show();self.titlebar.badge.setEnabled(False)
         manager,user=self.workshop_manager,self.user
         def prepare():

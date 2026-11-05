@@ -68,10 +68,10 @@ def typography_qss(appearance, zoom):
         family = json.dumps(spec["family"], ensure_ascii=False)
         scale = 1 if role in {"window_title", "caption"} else zoom / 100
         rules.append(f'QWidget[fontRole="{role}"]{{font-family:{family};'
-                     f'font-size:{max(6, spec["size"] * scale):g}px;font-weight:{spec["weight"]};'
+                     f'font-size:{max(6, round(spec["size"] * scale))}px;font-weight:{spec["weight"]};'
                      f'font-style:{"italic" if spec["italic"] else "normal"};}}')
     body = normalized["fonts"]["body"]
-    rules.append(f'QWidget[fontRole="subtitle"]{{font-family:{json.dumps(body["family"])};font-size:{body["size"] * zoom / 100:g}px;font-weight:400;font-style:normal;}}')
+    rules.append(f'QWidget[fontRole="subtitle"]{{font-family:{json.dumps(body["family"])};font-size:{max(6,round(body["size"] * zoom / 100))}px;font-weight:400;font-style:normal;}}')
     return "\n".join(rules)
 
 

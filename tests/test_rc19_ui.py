@@ -80,13 +80,14 @@ def test_role_ui_has_own_workshop_and_no_analytics(ui,app,role,key):
     assert not w.access_control_check.isEnabled()
 
 
-def test_switch_workshop_keeps_one_session_and_routes_new_window(ui,app,monkeypatch):
+def test_switch_workshop_keeps_one_session_and_routes_existing_window(ui,app,monkeypatch):
     create,manager,admin,_=ui;w=create();old=w.session_tracker.id
     w.choose_workshop();app.processEvents()
     action=next(a for a in w.workshop_menu.actions() if a.data()=="smoking")
     w.workshop_menu.close();action.trigger();app.processEvents();new=app._smartorder_main_window
+    drain(app,lambda:new.workshop=="smoking" and not new._workshop_switching)
     assert new.workshop=="smoking" and new.db.path.name=="work_orders_koptil.db"
-    assert new.session_tracker.id==old and w._switching
+    assert new is w and new.session_tracker.id==old and not w._switching
     new._rc4_exit_confirmed=True;new.close();new.deleteLater();app.sendPostedEvents(None,QEvent.DeferredDelete)
     with manager.auth.read_conn() as c:
         assert c.execute("SELECT COUNT(*) FROM app_sessions").fetchone()[0]==1
