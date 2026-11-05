@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .i18n import source_text, tr
 
 import json
 import os
@@ -120,19 +121,25 @@ class AnimatedToggle(QCheckBox):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         track = QLinearGradient(0, 0, self.width(), self.height())
-        track.setColorAt(0, QColor("#8197b0" if self.isChecked() else "#53b5ff"))
-        track.setColorAt(1, QColor("#6f86a2" if self.isChecked() else "#007aff"))
+        track.setColorAt(0, QColor("#53b5ff" if self.isChecked() else "#8197b0"))
+        track.setColorAt(1, QColor("#007aff" if self.isChecked() else "#6f86a2"))
         painter.setPen(QPen(QColor(255, 255, 255, 205), 1))
         painter.setBrush(track)
         painter.drawRoundedRect(QRectF(.5, .5, 46, 26), 13, 13)
         painter.setBrush(QColor("#fbfeff"))
-        x = 21 - (self._offset - 2) * 19 / 30
+        x = 2 + (self._offset - 2) * 19 / 30
         painter.drawEllipse(QRectF(x, 2, 23, 23))
 
     offset = pyqtProperty(int, get_offset, set_offset)
 
 
 class SmartComboBox(QComboBox):
+    def findText(self, text, flags=Qt.MatchExactly|Qt.MatchCaseSensitive):
+        from .i18n import item_source
+        for index in range(self.count()):
+            if item_source(self,index)==text:return index
+        return super().findText(text,flags)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumWidth(190)
@@ -259,7 +266,7 @@ class ResponsiveGrid(QWidget):
         # first resize pass to hide the zoom toolbar and action buttons.
         # ``isHidden()`` reflects the widget's explicit visibility state and
         # therefore preserves only intentional role-based hiding.
-        hidden = {id(widget): widget.isHidden() for widget in self._widgets}
+        hidden = {id(widget): widget.isHidden() and widget.testAttribute(Qt.WA_WState_ExplicitShowHide) for widget in self._widgets}
         while self._grid.count():
             item = self._grid.takeAt(0)
             if item is not None and item.widget() is not None:
@@ -271,7 +278,7 @@ class ResponsiveGrid(QWidget):
             # versions. Preserve an intentional hidden state (for example
             # the history panel for accounting roles) while showing controls
             # during the first layout pass.
-            if preserve_visibility and hidden.get(id(widget), False):
+            if hidden.get(id(widget), False):
                 widget.hide()
             else:
                 widget.show()
@@ -744,7 +751,7 @@ class HeavyMainWindow(BaseMainWindow):
     def refresh_orders(self):
         if not hasattr(self,"orders_table"): return
         try:
-            date=self.order_filter_date.date().toString("dd-MM-yyyy"); shift=self.order_filter_shift.currentText(); shift=None if shift=="Все смены" else shift
+            date=self.order_filter_date.date().toString("dd-MM-yyyy"); shift=source_text(self.order_filter_shift); shift=None if shift=="Все смены" else shift
             rows=self.db.list_orders(date=date,master_id=self.order_filter_master.currentData(),department_id=self.order_filter_dep.currentData(),shift=shift,limit=1500)
             display=[]
             for row in rows: display.append((int(row[0]),str(row[1]),str(row[2]),str(row[3]),str(row[4] or ""),str(row[5] or ""),str(row[6] or ""),False))
@@ -1214,7 +1221,6 @@ class HeavyUserDialog(QDialog):
         self.setMinimumWidth(430)
         self.setObjectName("ModalDialog")
         root = QVBoxLayout(self); root.setContentsMargins(22, 18, 22, 18); root.setSpacing(12)
-        title = QLabel(self.windowTitle()); title.setObjectName("TitleLabel"); title.setWordWrap(True); root.addWidget(title)
         subtitle = QLabel("Заполните данные для нового пользователя" if require_password else "Измените данные пользователя")
         subtitle.setObjectName("UserDialogSubtitle"); subtitle.setProperty("fontRole", "subtitle")
         subtitle.setWordWrap(True); subtitle.setStyleSheet("font-weight:400;"); root.addWidget(subtitle)
@@ -1222,7 +1228,7 @@ class HeavyUserDialog(QDialog):
         self.username = QLineEdit(username); self.username.setPlaceholderText("Логин")
         self.password = QLineEdit(); self.password.setEchoMode(QLineEdit.Password)
         self.password.setPlaceholderText("Пароль" if require_password else "Оставьте пустым, чтобы не менять")
-        self.role_list=QListWidget();self.role_list.setSelectionMode(QAbstractItemView.NoSelection);self.role_list.setMaximumHeight(150)
+        self.role_list=QListWidget();self.role_list.setObjectName("UserRoleList");self.role_list.setSelectionMode(QAbstractItemView.NoSelection);self.role_list.setMaximumHeight(150)
         selected=set(split_roles(role))
         for name in ROLES:
             item=QListWidgetItem(name);item.setData(Qt.UserRole,name);item.setFlags(item.flags()|Qt.ItemIsUserCheckable);item.setCheckState(Qt.Checked if name in selected else Qt.Unchecked);self.role_list.addItem(item)
@@ -1804,7 +1810,7 @@ class RC3MainWindow(HeavyMainWindow):
     def refresh_orders(self):
         if not hasattr(self,"orders_table"):return
         try:
-            s=self.order_filter_date.startDate();e=self.order_filter_date.endDate();shift=self.order_filter_shift.currentText();shift=None if shift=="Все смены" else shift
+            s=self.order_filter_date.startDate();e=self.order_filter_date.endDate();shift=source_text(self.order_filter_shift);shift=None if shift=="Все смены" else shift
             rows=self.db.list_orders(date_from=s.toString("yyyy-MM-dd"),date_to=e.toString("yyyy-MM-dd"),master_id=self.order_filter_master.currentData(),department_id=self.order_filter_dep.currentData(),shift=shift,limit=1500);display=[]
             for row in rows:display.append((int(row[0]),str(row[1]),str(row[2]),str(row[3]),str(row[4] or ""),str(row[5] or ""),str(row[6] or ""),False))
             for p,label,d,sh,m,dep,upd in self._draft_records():
@@ -2064,7 +2070,7 @@ class RC3MainWindow(HeavyMainWindow):
         except Exception as exc:error(self,"Сбор логов",exc)
 
     def _session_text(self):
-        total=max(0,int(time.monotonic()-self._session_started));h,rem=divmod(total,3600);m,sec=divmod(rem,60);return f"Текущая сессия: {h:02d}:{m:02d}:{sec:02d}"
+        total=max(0,int(time.monotonic()-self._session_started));h,rem=divmod(total,3600);m,sec=divmod(rem,60);return tr("Текущая сессия:")+f" {h:02d}:{m:02d}:{sec:02d}"
     def _update_session_labels(self):
         text=self._session_text()
         for name in ("admin_session_label","about_session_label","personalization_session_label"):
@@ -2947,7 +2953,7 @@ class RC4WorkOrderDialog(RC3WorkOrderDialog):
                 lines.append(line)
         return {
             "order_date": self.order_date.date().toString("dd-MM-yyyy"),
-            "shift_type": self.shift.currentText(),
+            "shift_type": source_text(self.shift),
             "master_id": self.master.currentData(),
             "department_id": self.department.currentData(),
             "comment": self.comment.text().strip(),

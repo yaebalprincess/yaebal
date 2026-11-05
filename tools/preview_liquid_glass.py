@@ -22,6 +22,7 @@ def main():
     parser.add_argument("--height", type=int, default=910)
     parser.add_argument("--zoom", type=int, default=100)
     parser.add_argument("--theme", choices=["light", "dark"], default="light")
+    parser.add_argument("--language",choices=["ru","en","es"],default="ru")
     parser.add_argument("--tab", choices=["orders", "catalog", "employees", "admin", "analytics", "personalization", "about"], default="orders")
     parser.add_argument("--dialog", choices=["create", "calendar", "employees", "works", "news", "backup"], help="Открыть вложенное окно")
     parser.add_argument("--popup", choices=["master", "shift", "department", "workshop", "date"], help="Открыть стеклянную панель в снимке")
@@ -41,12 +42,12 @@ def main():
         from smartorder.workshops import WorkshopManager
         app = QApplication(sys.argv[:1])
         app.setStyle("Fusion")
-        SettingsStore().save(UiSettings(args.theme, max(50, min(200, args.zoom))))
+        SettingsStore().save(UiSettings(args.theme, max(50, min(200, args.zoom)), language=args.language))
         db = Database(root / "shared" / "work_orders.db")
         db.create_first_admin("admin", "preview-only-password")
         manager = WorkshopManager(db, db.path.parent)
         user = manager.auth.authenticate("admin", "preview-only-password")
-        SettingsStore(user.id, user.username).save(UiSettings(args.theme, max(50, min(200, args.zoom))))
+        SettingsStore(user.id, user.username).save(UiSettings(args.theme, max(50, min(200, args.zoom)), language=args.language))
         window = MainWindow(db, user, manager)
         if args.screenshot or args.pdf:
             window.resize(args.width, args.height)
@@ -106,7 +107,7 @@ def main():
                                 dialog = EmployeeSelectionDialog(window.db, window)
                             elif args.dialog == "news":
                                 from smartorder.news_ui import NewsDialog
-                                dialog = NewsDialog(window, root / "preview-news.txt", prefix="Smart Order · Liquid Glass v5\nПерсонализация профиля, быстрое переключение тем и исправленные диалоги.")
+                                dialog = NewsDialog(window, root / "preview-news.txt", prefix="Smart Order · Liquid Glass v6\nЯзыки интерфейса, настройка столбцов и быстрый масштаб вкладок.")
                             elif args.dialog == "backup":
                                 from PyQt5.QtWidgets import QMessageBox
                                 dialog = QMessageBox(QMessageBox.Information, "Резервная копия", "Создана резервная копия\nНаряды и история изменений сохранены.", QMessageBox.Ok, window)

@@ -58,6 +58,7 @@
             </div>
             </div>
             <div class="order-actions" id="order-actions">
+              <div class="access-overlay" id="access-overlay" hidden>Недоступно</div>
               <button class="action-button primary" data-action="create" id="create">Создать наряд</button>
               <button class="action-button secondary" data-action="edit" id="edit" disabled>Редактировать</button>
               <button class="action-button secondary" data-action="export" id="export" disabled>Выгрузить в EXCEL</button>
@@ -77,7 +78,7 @@
               <tbody id="order-rows"></tbody>
             </table>
           </div>
-          <div class="access-overlay" id="access-overlay" hidden>Недоступно</div>
+          <div class="empty-orders" id="empty-orders" hidden>Для начала работы создайте наряд.</div>
         </section>
       </div>
     </div>

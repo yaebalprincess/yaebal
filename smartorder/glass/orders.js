@@ -5,6 +5,40 @@
   let rowSignature = "", historySignature = "", tabSignature = "";
   let toastTimer, lastZoom = 100;
   const rowNodes = new Map();
+  let activeLanguage=null,fontSignature="",columnSignature="",columnDrag=null;
+  const staticTexts=[];
+  const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+  for(let node=walker.nextNode();node;node=walker.nextNode()){
+    if(node.textContent.trim() && !node.parentElement.closest("script,style,#order-rows,#history"))staticTexts.push([node,node.textContent]);
+  }
+  const translatedAttributes=Array.from(document.querySelectorAll("[placeholder],[aria-label],[title]")).map(node=>[node,["placeholder","aria-label","title"].filter(a=>node.hasAttribute(a)).map(a=>[a,node.getAttribute(a)])]);
+  function t(text){return state&&state.translations&&state.translations[text]||text;}
+  window.SmartOrderI18n=t;
+  function translatePage(){
+    if(activeLanguage===state.language)return;
+    activeLanguage=state.language;document.documentElement.lang=state.language;
+    for(const [node,source] of staticTexts){const trimmed=source.trim();if(state.translations[trimmed])node.textContent=source.replace(trimmed,t(trimmed));}
+    for(const [node,attributes] of translatedAttributes)for(const [name,source] of attributes)node.setAttribute(name,t(source));
+  }
+  const headerCells=Array.from(document.querySelectorAll("#orders-table th"));
+  const columnNodes=Array.from(document.querySelectorAll("#orders-table col"));
+  function applyColumns(widths){
+    const total=widths.reduce((a,b)=>a+b,0);
+    widths.forEach((width,i)=>{columnNodes[i].style.width=(width/total*100)+"%";});
+  }
+  function resizeColumn(index,delta){
+    const widths=headerCells.map(cell=>cell.getBoundingClientRect().width);
+    delta=Math.max(48-widths[index],Math.min(widths[index+1]-48,delta));
+    widths[index]+=delta;widths[index+1]-=delta;applyColumns(widths);return widths;
+  }
+  headerCells.slice(0,-1).forEach((cell,index)=>{
+    const handle=document.createElement("span");handle.className="column-resizer";handle.tabIndex=0;handle.setAttribute("role","separator");handle.setAttribute("aria-orientation","vertical");handle.setAttribute("aria-label","Resize column");cell.appendChild(handle);
+    handle.addEventListener("pointerdown",event=>{if(event.button!==0)return;event.preventDefault();event.stopPropagation();columnDrag={index,x:event.clientX,widths:headerCells.map(c=>c.getBoundingClientRect().width)};handle.setPointerCapture(event.pointerId);document.body.classList.add("resizing-columns");});
+    handle.addEventListener("pointermove",event=>{if(!columnDrag)return;const widths=columnDrag.widths.slice();const delta=Math.max(48-widths[index],Math.min(widths[index+1]-48,event.clientX-columnDrag.x));widths[index]+=delta;widths[index+1]-=delta;applyColumns(widths);});
+    handle.addEventListener("pointerup",event=>{if(!columnDrag)return;columnDrag=null;document.body.classList.remove("resizing-columns");send("columns",{widths:headerCells.map(c=>c.getBoundingClientRect().width)});});
+    handle.addEventListener("keydown",event=>{if(event.key!=="ArrowLeft"&&event.key!=="ArrowRight")return;event.preventDefault();send("columns",{widths:resizeColumn(index,event.key==="ArrowLeft"?-12:12)});});
+    handle.addEventListener("lostpointercapture",()=>{columnDrag=null;document.body.classList.remove("resizing-columns");});
+  });
   // Qt 5.15.2 ships Chromium 83, before Element.replaceChildren.
   function replaceContent(node, fragment) { node.textContent = ""; node.appendChild(fragment); }
 
@@ -15,7 +49,7 @@
     });
   }
   function toast(message) {
-    $("toast").textContent = String(message);
+    $("toast").textContent = t(String(message));
     $("toast").hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { $("toast").hidden = true; }, 4500);
@@ -75,9 +109,12 @@
   }
   function render(raw) {
     state = typeof raw === "string" ? JSON.parse(raw) : raw;
+    translatePage();
     document.documentElement.dataset.theme = state.theme;
     document.documentElement.dataset.embedded = state.embedded ? "true" : "false";
     const fonts = state.appearance && state.appearance.fonts || {};
+    const fontsKey=JSON.stringify(fonts);
+    if(fontsKey!==fontSignature){fontSignature=fontsKey;
     for (const [role, spec] of Object.entries(fonts)) {
       const prefix = "--font-" + role.replace(/_/g, "-");
       document.documentElement.style.setProperty(prefix + "-family", JSON.stringify(spec.family));
@@ -85,10 +122,11 @@
       document.documentElement.style.setProperty(prefix + "-weight", String(spec.weight));
       document.documentElement.style.setProperty(prefix + "-style", spec.italic ? "italic" : "normal");
     }
+    }
     document.documentElement.style.setProperty("--ui-scale", String(state.zoom / 100));
-    $("theme").checked = state.theme !== "dark";
-    $("theme").setAttribute("aria-label", "Светлая тема");
-    $("theme-label").textContent = state.theme === "dark" ? "Тёмная тема" : "Светлая тема";
+    $("theme").checked = state.theme === "dark";
+    $("theme").setAttribute("aria-label", t("Тёмная тема"));
+    $("theme-label").textContent = t(state.theme === "dark" ? "Тёмная тема" : "Светлая тема");
     $("account-label").textContent = state.username + " · " + state.workshop;
     $("account").title = state.role + "\nВыбрать цех";
     $("account").disabled = !state.workshopEnabled;
@@ -125,6 +163,10 @@
     const visibleActions = Object.values(state.actions).filter(a => a.visible).length;
     if (window.innerWidth > 1000) $("order-actions").style.gridTemplateColumns = "repeat(" + Math.max(1, visibleActions) + ", minmax(0, 1fr))";
     renderRows(state.rows);
+    $("empty-orders").hidden=state.rows.length>0||!state.allowed||state.busy;
+    $("empty-orders").textContent=state.emptyMessage;
+    const columnsKey=JSON.stringify(state.columns||[]);
+    if(!columnDrag&&columnsKey!==columnSignature){columnSignature=columnsKey;if(state.columns&&state.columns.length===6)applyColumns(state.columns);}
     selectRow(state.selected, false);
     const historyKey = JSON.stringify(state.history);
     if (historyKey !== historySignature) {
@@ -186,7 +228,7 @@
     const filter = event.target.dataset.filter;
     if (filter) send("filter", {name: filter, value: filter === "shift" ? event.target.value : event.target.value === "" ? null : Number(event.target.value)});
   });
-  $("theme").addEventListener("change", event => send("theme", {dark: !event.target.checked}));
+  $("theme").addEventListener("change", event => send("theme", {dark: event.target.checked}));
   $("zoom").addEventListener("input", event => updateZoom(Number(event.target.value)));
   $("zoom").addEventListener("change", event => send("zoom", {value: Number(event.target.value)}));
   $("titlebar").addEventListener("mousedown", event => {

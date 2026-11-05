@@ -113,7 +113,8 @@ class ReportModel(QAbstractTableModel):
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self.columns[section][1]
+            from .i18n import tr
+            return tr(self.columns[section][1])
 
     def set_rows(self, rows):
         self.beginResetModel()

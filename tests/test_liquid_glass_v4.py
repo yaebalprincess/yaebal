@@ -64,7 +64,10 @@ def test_one_header_navigation_and_scale_survive_every_tab_at_113_percent(glass,
         window.tabs.setCurrentIndex(index)
         app.processEvents()
         measurements.append((window.size(), window.titlebar.geometry(), window.zoom.mapTo(window,window.zoom.rect().topLeft()), window.tabs.tabBar().geometry()))
-        assert window.zoom.isVisible() and window.zoom.isEnabled() and window.zoom.value() == 113
+        assert window.zoom.isVisible() == (index != 4)
+        assert window.zoom.isEnabled() == (index != 4)
+        assert window.zoom_message.isVisible() == (index == 4)
+        assert window.zoom.value() == 113
     assert all(value == measurements[0] for value in measurements)
     assert javascript(app, window, 'getComputedStyle(document.getElementById("titlebar")).display') == "none"
     assert javascript(app, window, 'getComputedStyle(document.getElementById("tabs")).display') == "none"

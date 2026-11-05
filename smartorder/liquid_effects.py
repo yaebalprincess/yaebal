@@ -231,6 +231,7 @@ class LiquidController(QObject):
         root._liquid_backdrop.update()
 
     def style_widget(self, widget, theme):
+        if getattr(widget, "_liquid_applied_theme", None) == theme: return
         if isinstance(widget, (GlassBackdrop, LiveGlassBackdrop, ControlLight, PageTransition)) or legacy_surface(widget):
             return
         changed = widget.property("theme") != theme
@@ -289,13 +290,15 @@ class LiquidController(QObject):
             widget.style().polish(widget)
             widget.update()
 
+        widget._liquid_applied_theme = theme
+
     def apply(self, root, theme=None):
         if self._styling or sip.isdeleted(root) or legacy_surface(root):
             return
         self._styling = True
         try:
             theme = theme or theme_of(root)
-            if (isinstance(root, QDialog) or root.objectName() == "NotificationPopup") and root.styleSheet():
+            if (isinstance(root, QDialog) or root.objectName() == "NotificationPopup") and root.styleSheet() and root.styleSheet() != getattr(root,"_liquid_scoped_qss",None):
                 root.setStyleSheet("")
             self.style_widget(root, theme)
             visible_only = isinstance(root, QMainWindow) and root.isVisible()
@@ -318,17 +321,20 @@ class LiquidController(QObject):
     def is_overlay(widget):
         # Qt creates private combo popup windows during polish. Converting those
         # hidden native containers to glass surfaces can expose empty windows.
-        return (isinstance(widget, (QDialog, QMenu)) or bool(widget.property("liquidPopup"))
+        return not widget.property("plainSurface") and (isinstance(widget, (QDialog, QMenu)) or bool(widget.property("liquidPopup"))
                 or widget.objectName() in {"NotificationPopup", "RC5InfoPopup"})
 
     def eventFilter(self, widget, event):
         if not isinstance(widget, QWidget) or isinstance(widget, (GlassBackdrop, LiveGlassBackdrop, ControlLight, PageTransition)) or legacy_surface(widget):
             return False
         kind = event.type()
+        if widget.property("plainSurface") or widget.window().property("plainSurface"):return False
         overlay = self.is_overlay(widget)
         if kind == QEvent.Polish and overlay:
             prepare_overlay(widget)
         if kind == QEvent.Show:
+            from .i18n import apply_widget, apply_language
+            apply_language(widget) if overlay else apply_widget(widget)
             if overlay:
                 self.apply(widget)
             else:

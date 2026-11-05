@@ -12,8 +12,8 @@ import time
 from PyQt5 import sip
 from PyQt5.QtCore import QEvent, QObject, QPoint, QPointF, QRect, QRectF, Qt, QTimer
 from PyQt5.QtGui import QBrush, QColor, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QRegion
-from PyQt5.QtWidgets import (QApplication, QDialog, QFrame, QGraphicsBlurEffect,
-    QGraphicsScene, QHBoxLayout, QLabel, QMenu, QMessageBox, QSizeGrip, QToolButton, QWidget)
+from PyQt5.QtWidgets import (QApplication, QDialog, QFrame,
+    QHBoxLayout, QLabel, QMenu, QMessageBox, QSizeGrip, QToolButton, QWidget)
 
 
 class GlassTitleBar(QFrame):
@@ -94,15 +94,8 @@ class LiveGlassBackdrop(QWidget):
         self._last_move_frame = 0.0
         self.capture_count = 0
         self.source_rect = QRect()
-        self.scene = QGraphicsScene(self)
-        self.scene.setItemIndexMethod(QGraphicsScene.NoIndex)
-        self.item = self.scene.addPixmap(QPixmap())
-        self.blur = QGraphicsBlurEffect()
-        self.blur.setBlurRadius(18)
-        self.blur.setBlurHints(QGraphicsBlurEffect.PerformanceHint)
-        self.item.setGraphicsEffect(self.blur)
         self.timer = QTimer(self)
-        self.timer.setInterval(80)
+        self.timer.setInterval(180)
         self.timer.timeout.connect(self.refresh)
         self.pending = QTimer(self)
         self.pending.setSingleShot(True); self.pending.setInterval(16)
@@ -116,14 +109,14 @@ class LiveGlassBackdrop(QWidget):
         return parent.window() if parent is not None else None
 
     def start(self):
-        self.timer.setInterval(250 if self.parentWidget().isMaximized() else 80)
+        if not self.parentWidget().isVisible():return
+        self.timer.setInterval(300 if self.parentWidget().isMaximized() else 180)
         self.refresh()
         self.timer.start()
 
     def stop(self):
         self.timer.stop(); self.pending.stop()
         self.raw = QPixmap(); self.blurred = QPixmap(); self._previous = None
-        self.item.setPixmap(QPixmap())
 
     def schedule(self):
         if not self.pending.isActive(): self.pending.start()
@@ -168,13 +161,9 @@ class LiveGlassBackdrop(QWidget):
             if self._previous is not None and image == self._previous: return
             self._previous = image
             self.raw = raw
-            self.item.setPixmap(raw)
-            logical = QRectF(0, 0, region.width(), region.height())
-            self.scene.setSceneRect(logical)
-            blurred = QPixmap(raw.size()); blurred.setDevicePixelRatio(ratio); blurred.fill(Qt.transparent)
-            painter = QPainter(blurred)
-            self.scene.render(painter, logical, logical)
-            painter.end()
+            small=raw.toImage().scaled(max(1,raw.width()//12),max(1,raw.height()//12),Qt.IgnoreAspectRatio,Qt.SmoothTransformation)
+            blurred=QPixmap.fromImage(small.scaled(raw.size(),Qt.IgnoreAspectRatio,Qt.SmoothTransformation))
+            blurred.setDevicePixelRatio(ratio)
             self.blurred = blurred
             self.update()
             if isinstance(target, QMenu): target.update()

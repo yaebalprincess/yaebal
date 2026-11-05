@@ -5,6 +5,7 @@ dialogs and live reads continue to use enterprise_ui and its repositories.
 There is no HTTP server and no database access from JavaScript.
 """
 from __future__ import annotations
+from .i18n import source_text, item_source, tr
 
 import hashlib
 import json
@@ -30,7 +31,7 @@ log = logging.getLogger(__name__)
 ASSET_ROOT = resource_path("smartorder/glass")
 ACTIONS = frozenset({"ready", "select", "filter", "date", "date_range", "create", "edit",
                      "export", "delete", "open", "view", "history", "tab",
-                     "theme", "zoom", "refresh", "workshop", "notifications",
+                     "columns", "theme", "zoom", "refresh", "workshop", "notifications",
                      "minimize", "maximize", "close", "move", "resize", "fullscreen"})
 
 
@@ -169,7 +170,7 @@ class MainWindow(EnterpriseWindow):
                        history_model.modelReset, history_model.dataChanged):
             signal.connect(self._schedule_glass_state)
         self.theme.toggled.connect(self._schedule_glass_state)
-        self.zoom.valueChanged.connect(self._schedule_glass_state)
+        self.zoom.valueChanged.connect(lambda *_:None if self.zoom.isSliderDown() else self._schedule_glass_state())
         self._glass_chrome_timer = QTimer(self)
         self._glass_chrome_timer.setInterval(500)
         self._glass_chrome_timer.timeout.connect(self._poll_glass_chrome)
@@ -192,8 +193,9 @@ class MainWindow(EnterpriseWindow):
         bar.setFixedHeight(50)
         row = QHBoxLayout(bar)
         row.setContentsMargins(25, 0, 18, 0); row.setSpacing(16)
-        label = QLabel("Масштаб:"); label.setFixedWidth(110)
+        label = QLabel("Масштаб:"); label.setFixedWidth(110); self.scale_caption=label
         row.addWidget(label)
+        layout.removeWidget(self.zoom_message);row.addWidget(self.zoom_message,1)
         self.zoom.setMaximumWidth(480); self.zoom.setMinimumWidth(100)
         row.addWidget(self.zoom, 1)
         self.zoom_label.setFixedWidth(64); row.addWidget(self.zoom_label)
@@ -213,14 +215,15 @@ class MainWindow(EnterpriseWindow):
         body.addWidget(self.tabs)
         layout.insertWidget(index, workspace, 1)
         self.tabs.setTabText(6, "О приложении")
-        self._ensure_tab_widths()
+        self._ensure_tab_widths();self._update_zoom_mode()
 
     def _ensure_tab_widths(self):
         if not hasattr(self, "tabs"): return
         bar = self.tabs.tabBar()
         scale = self.ui_settings.zoom / 100
         bar.setMinimumHeight(0)
-        bar.setStyleSheet(f"QTabBar::tab{{min-width:{max(72,round(84*scale))}px;min-height:{max(28,round(30*scale))}px;padding-left:{round(20*scale)}px;padding-right:{round(20*scale)}px;}}")
+        css=f"QTabBar::tab{{min-width:{max(72,round(84*scale))}px;min-height:{max(28,round(30*scale))}px;padding-left:{round(20*scale)}px;padding-right:{round(20*scale)}px;font-size:{round(13*scale)}px;}}"
+        if bar.styleSheet()!=css:bar.setStyleSheet(css)
         bar.setExpanding(False); bar.setElideMode(Qt.ElideNone)
 
     def set_appearance(self, appearance):
@@ -281,23 +284,27 @@ class MainWindow(EnterpriseWindow):
                             ("shift", self.order_filter_shift), ("department", self.order_filter_dep)):
             shift = name == "shift"
             filters[name] = {
-                "value": combo.currentText() if shift else combo.currentData(),
-                "options": [{"value": combo.itemText(i) if shift else combo.itemData(i),
-                             "label": combo.itemText(i)} for i in range(combo.count())]
+                "value": source_text(combo) if shift else combo.currentData(),
+                "options": [{"value": item_source(combo,i) if shift else combo.itemData(i),
+                             "label": tr(combo.itemText(i))} for i in range(combo.count())]
             }
         filters["date"] = self.order_filter_date.text()
         filters["dateStart"] = self.order_filter_date.startDate().toString("yyyy-MM-dd")
         filters["dateEnd"] = self.order_filter_date.endDate().toString("yyyy-MM-dd")
         filters["today"] = QDate.currentDate().toString("yyyy-MM-dd")
+        from .i18n import web_catalog
         accessible = allowed_workshops(self.user)
         return {
+            "language": self.ui_settings.language, "translations": web_catalog(self.ui_settings.language),
+            "columns": self.ui_settings.order_columns,
+            "emptyMessage": tr("Для начала работы создайте наряд." if self.can(Permission.ORDERS_CREATE) else "Наряды пока не созданы."),
             "embedded": True, "currentTab": self.tabs.currentIndex(),
             "appearance": self.ui_settings.appearance,
             "theme": self.ui_settings.theme, "zoom": self.ui_settings.zoom,
-            "username": self.user.username, "role": self.user.role,
-            "workshop": WORKSHOPS[self.workshop], "allowed": allowed,
+            "username": self.user.username, "role": " · ".join(tr(role) for role in split_roles(self.user.role)),
+            "workshop": tr(WORKSHOPS[self.workshop]), "allowed": allowed,
             "workshopKey": self.workshop,
-            "workshops": [{"value": key, "label": label, "enabled": key in accessible}
+            "workshops": [{"value": key, "label": tr(label), "enabled": key in accessible}
                           for key, label in WORKSHOPS.items()],
             "tabs": [{"label": self.tabs.tabText(i).replace(" ⍰", ""),
                       "enabled": self.tabs.isTabEnabled(i)} for i in range(self.tabs.count())],
@@ -439,6 +446,11 @@ class MainWindow(EnterpriseWindow):
             index = data.get("index")
             if type(index) is int and 0 <= index < self.tabs.count() and self.tabs.isTabEnabled(index):
                 self.tabs.setCurrentIndex(index)
+        elif action == "columns":
+            from .config import normalize_order_columns
+            columns=normalize_order_columns(data.get("widths"))
+            if columns:
+                self.ui_settings.order_columns=columns;self.settings_store.save(self.ui_settings)
         elif action == "theme" and type(data.get("dark")) is bool:
             self.theme.setChecked(data["dark"])
         elif action == "zoom" and type(data.get("value")) is int:

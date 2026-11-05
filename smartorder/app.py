@@ -284,7 +284,20 @@ def main(boot_started: float | None = None) -> int:
         mark("login-bypassed")
         _show_splash_status(splash, app, "Загрузка рабочего окна…")
 
-    window = MainWindow(startup_box["manager"]._databases["packaging"], session_user, manager=startup_box["manager"])
+    from .workshops import allowed_workshops
+    from .config import local_state_dir
+    from .workspace_ui import WorkshopLoadingDialog
+    from .i18n import set_language
+    allowed=allowed_workshops(session_user)
+    try:workshop=(local_state_dir()/f"workshop_{session_user.id}.txt").read_text().strip()
+    except OSError:workshop=allowed[0]
+    if workshop not in allowed:workshop=allowed[0]
+    set_language(SettingsStore(session_user.id,session_user.username).load().language)
+    splash.hide()
+    workshop_loading=WorkshopLoadingDialog(workshop)
+    workshop_loading.show();app.processEvents()
+    window = MainWindow(startup_box["manager"].database(workshop,session_user), session_user, manager=startup_box["manager"])
+    workshop_loading.close();workshop_loading.deleteLater()
     app._smartorder_main_window = window
     mark("main-window-constructed")
     window.showMaximized()

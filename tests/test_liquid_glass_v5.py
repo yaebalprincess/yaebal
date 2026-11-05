@@ -26,7 +26,7 @@ def native(app, system):
     app.sendPostedEvents(None, QEvent.DeferredDelete); app.processEvents()
 
 
-def test_profile_settings_are_separate_and_transient_settings_do_not_survive_restart(tmp_path, monkeypatch):
+def test_profile_settings_are_separate_and_startup_flag_keeps_saved_preferences(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     monkeypatch.setenv("SMARTORDER_NETWORK_ROOT", str(tmp_path / "share"))
     a, b = SettingsStore(1, "alice"), SettingsStore(2, "bob")
@@ -36,7 +36,7 @@ def test_profile_settings_are_separate_and_transient_settings_do_not_survive_res
     assert b.load().theme == "light" and b.path != a.path
     settings.remember_personalization = False
     a.save(settings)
-    assert not a.path.exists() and a.load().theme == "dark"
+    assert a.path.exists() and a.load().theme == "dark"
     assert SettingsStore(1, "alice").load().about_theme == 2
     settings.remember_personalization = True
     a.save(settings)

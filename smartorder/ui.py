@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .i18n import source_text
 
 import json
 import os
@@ -560,7 +561,7 @@ class WorkOrderDialog(QDialog):
                 lines.append(line)
         return {
             "order_date": self.order_date.date().toString("dd-MM-yyyy"),
-            "shift_type": self.shift.currentText(),
+            "shift_type": source_text(self.shift),
             "master_id": self.master.currentData(),
             "department_id": self.department.currentData(),
             "comment": self.comment.text().strip(),
@@ -640,6 +641,8 @@ class MainWindow(QMainWindow):
         if getattr(self, "_initial_ui_settings", None) is not None:
             from copy import deepcopy
             self.ui_settings = deepcopy(self._initial_ui_settings)
+        from .i18n import set_language
+        set_language(self.ui_settings.language)
         if self.ui_settings.auto_theme:
             from .config import scheduled_theme
             self.ui_settings.theme = scheduled_theme()

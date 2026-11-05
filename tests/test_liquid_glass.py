@@ -133,7 +133,8 @@ def test_theme_and_zoom_round_trip_and_native_tabs(glass, app):
     assert window._glass_stack.currentWidget() is window._glass
     window.tabs.setCurrentIndex(4)
     drain(app, lambda: window.analytics is not None)
-    assert window.zoom.isEnabled() and window.ui_settings.zoom == 150
+    assert not window.zoom.isEnabled() and not window.zoom.isVisible()
+    assert window.zoom_message.isVisible() and window.ui_settings.zoom == 150
     window.tabs.setCurrentIndex(0)
     assert window.zoom.isEnabled() and window.ui_settings.zoom == 150
 
@@ -205,15 +206,10 @@ def test_responsive_window_keeps_caption_buttons_at_200_percent(glass, app):
 def test_workshop_switch_preserves_glass_class_and_single_session(glass, app):
     window, _, _ = glass
     session = window.session_tracker.id
+    view = window._glass
     new_window = window._switch_to_workshop("smoking")
-    try:
-        assert isinstance(new_window, MainWindow)
-        drain(app, lambda: new_window._glass_ready, timeout=12)
-        assert new_window.workshop == "smoking"
-        assert new_window.session_tracker.id == session
-        assert new_window.glass_state()["workshop"] == "Коптильный"
-    finally:
-        new_window._rc4_exit_confirmed = True
-        new_window.close()
-        new_window.deleteLater()
-        app.sendPostedEvents(None, QEvent.DeferredDelete)
+    assert new_window is window and isinstance(new_window, MainWindow)
+    drain(app, lambda: new_window.workshop == "smoking" and not new_window._orders_running, timeout=12)
+    assert new_window._glass is view
+    assert new_window.session_tracker.id == session
+    assert new_window.glass_state()["workshop"] == "Коптильный"

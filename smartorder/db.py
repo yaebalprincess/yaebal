@@ -638,8 +638,10 @@ class Database:
         password = str(password or "")
         if not username or len(username) > 128 or any(ord(ch) < 32 for ch in username):
             raise ValueError("Логин обязателен и должен быть не длиннее 128 символов")
-        if len(password) < 8 or len(password) > 4096:
-            raise ValueError("Пароль должен содержать от 8 до 4096 символов")
+        if len(password) < 8:
+            raise ValueError("Пароль должен содержать не менее 8 символов.")
+        if len(password) > 4096:
+            raise ValueError("Пароль слишком длинный.")
         with self.write_conn() as conn:
             if conn.execute("SELECT 1 FROM users LIMIT 1").fetchone():
                 raise DatabaseError("Пользователи уже существуют")
@@ -703,8 +705,10 @@ class Database:
         role = str(role or "").strip()
         if not username or len(username) > 128 or any(ord(ch) < 32 for ch in username):
             raise ValueError("Логин обязателен и должен быть не длиннее 128 символов")
-        if len(password) < 8 or len(password) > 4096:
-            raise ValueError("Пароль должен содержать от 8 до 4096 символов")
+        if len(password) < 8:
+            raise ValueError("Пароль должен содержать не менее 8 символов.")
+        if len(password) > 4096:
+            raise ValueError("Пароль слишком длинный.")
         role_names=split_roles(role)
         if not role_names or any(name not in DEFAULT_ROLE_PERMISSIONS for name in role_names):
             raise ValueError("Неизвестная роль пользователя")
@@ -726,8 +730,10 @@ class Database:
             raise ValueError("Неизвестная роль пользователя")
         with self.write_conn() as conn:
             if password:
-                if len(password) < 8 or len(password) > 4096:
-                    raise ValueError("Пароль должен содержать от 8 до 4096 символов")
+                if len(password) < 8:
+                    raise ValueError("Пароль должен содержать не менее 8 символов.")
+                if len(password) > 4096:
+                    raise ValueError("Пароль слишком длинный.")
                 conn.execute(
                     "UPDATE users SET username=?,role=?,password_hash=? WHERE id=?",
                     (username, role, hash_password(password), user_id),

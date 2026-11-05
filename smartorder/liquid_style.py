@@ -25,6 +25,8 @@ def colors(dark=False):
 
 
 def liquid_qss(zoom=100, appearance=None):
+    from .config import resource_path
+    checkmark=resource_path("smartorder/glass/assets/checkmark.svg").as_posix()
     scale = max(.5, min(2, int(zoom) / 100))
     size = max(6, round(12 * scale))
     height = max(28, round(30 * min(scale, 1.5)))
@@ -85,6 +87,7 @@ QLabel#DbStateBad {{ color:#e44f67; font-weight:700; }}
         # parentless Qt.Popup windows and delegates created after a tab loads.
         def rule(selectors, body):
             return ",".join(f'{s}[theme="{theme}"]' for s in selectors.split(",")) + "{" + body + "}\n"
+        qss += rule("QMainWindow", f'background:{c["base"]};')
         qss += rule("QWidget", f'color:{c["ink"]};')
         qss += rule("QLabel", f'color:{c["ink"]};background:transparent;')
         qss += rule("QMessageBox", f'background:{c["base"]};color:{c["ink"]};border:1px solid {c["edge"]};border-radius:16px;')
@@ -115,6 +118,11 @@ QLabel#DbStateBad {{ color:#e44f67; font-weight:700; }}
         qss += rule("QMenu", f'background:{c["table"]};color:{c["ink"]};border:1px solid {c["edge"]};')
         qss += f'QMenu[theme="{theme}"]::item:selected{{background:{c["selected"]};}}\n'
         qss += f'QCalendarWidget[theme="{theme}"] QWidget{{background:{c["table"]};color:{c["ink"]};}}\n'
+    for theme in ("light","dark"):
+        c=colors(theme=="dark")
+        qss+=f'QPushButton#NotificationBell[theme="{theme}"]:pressed,QPushButton#NotificationBell[theme="{theme}"]:checked{{color:{c["blue"]};background:{c["selected"]};}}'
+        qss+=f'QListView[theme="{theme}"]::indicator{{width:17px;height:17px;border:1px solid {c["line"]};border-radius:4px;background:{c["field"]};}}'
+        qss+=f'QListView[theme="{theme}"]::indicator:checked{{background:#0785ff;border:1px solid #0785ff;image:url("{checkmark}");}}'
     from .appearance import typography_qss
     qss += '''
 QMenu[glassOverlay="true"]{background:rgba(242,250,255,30);}

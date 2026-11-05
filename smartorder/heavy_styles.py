@@ -72,20 +72,32 @@ def apply_apple_design(root=None, theme: str = "light", zoom: int = 100) -> None
         # Setting an identical application stylesheet still re-polishes every
         # widget, including hidden combo containers. Do it only when zoom changes.
         appearance = appearance_of(root)
-        key = (int(zoom), json.dumps(appearance, sort_keys=True))
+        key = json.dumps(appearance, sort_keys=True)
+        changed = getattr(app, "_smartorder_stylesheet_key", None) != key
         app._liquid_appearance = appearance
         if getattr(app, "_smartorder_stylesheet_key", None) != key:
-            app.setStyleSheet(liquid_qss(zoom, appearance))
-            app.setFont(font_for("body", zoom, appearance))
+            app.setStyleSheet(liquid_qss(100, appearance))
+            app.setFont(font_for("body", 100, appearance))
             app._smartorder_stylesheet_key = key
-            app._smartorder_stylesheet_zoom = int(zoom)
+            app._smartorder_stylesheet_zoom = 100
+        if getattr(app,"_liquid_theme",None)!=theme:
+            from PyQt5.QtGui import QPalette,QColor
+            from .liquid_style import colors
+            pal=app.palette();base=QColor(colors(theme=="dark")["base"])
+            for role in (QPalette.Window,QPalette.Base,QPalette.Button):pal.setColor(role,base)
+            app.setPalette(pal)
         app._liquid_theme = theme
         controller = install_liquid_effects(app)
     if root is not None:
         try: root.setObjectName("SmartOrderWindow")
         except Exception: pass
         if app is not None:
-            controller.apply(root, theme)
+            if changed or root.property("theme") != theme or not root.property("liquidGlass"):
+                controller.apply(root, theme)
+            from PyQt5.QtWidgets import QMainWindow
+            if not isinstance(root, QMainWindow):
+                from .workspace_ui import apply_page_scale
+                apply_page_scale(root, appearance, zoom)
 
 # RC3 final: popup/dialog theme parity and edit-mode visibility.
 APPLE_QSS += r'''

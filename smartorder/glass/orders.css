@@ -308,3 +308,12 @@ body { font-family: var(--font-body-family, "Segoe UI"), sans-serif; font-size: 
 #orders-table { font-family: var(--font-table-family, "Segoe UI"), sans-serif; font-size: calc(var(--font-table-size, 12px) * var(--ui-scale)); font-weight: var(--font-table-weight, 400); font-style: var(--font-table-style, normal); }
 #orders-table th { font-family: var(--font-table-header-family, "Segoe UI"), sans-serif; font-size: calc(var(--font-table-header-size, 12px) * var(--ui-scale)); font-weight: var(--font-table-header-weight, 500); font-style: var(--font-table-header-style, normal); }
 .filter-label { font-family: inherit; font-size: inherit; }
+
+.order-actions{position:relative;min-height:44px;}
+.order-actions .access-overlay{border-radius:9px;font-size:1.1rem;}
+.empty-orders{position:absolute;inset:3.4rem 12px 0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:1.1rem;text-align:center;pointer-events:none;}
+th{position:sticky;}
+.column-resizer{position:absolute;right:-4px;top:0;bottom:0;width:9px;z-index:3;cursor:col-resize;touch-action:none;}
+.column-resizer:hover,.column-resizer:focus{background:rgba(7,129,255,.32);outline:none;}
+body.resizing-columns,body.resizing-columns *{cursor:col-resize!important;user-select:none!important;}
+.notification-button:active,.notification-button[aria-expanded="true"]{color:var(--blue);background:rgba(83,181,255,.23);}

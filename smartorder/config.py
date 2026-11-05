@@ -154,6 +154,15 @@ class UiSettings:
     remember_personalization: bool = True
     auto_theme: bool = False
     about_theme: int = 2
+    language: str = "ru"
+    order_columns: list = field(default_factory=list)
+
+
+def normalize_order_columns(value):
+    import math
+    if not isinstance(value,list) or len(value)!=6:return []
+    if any(type(x) not in (int,float) or not math.isfinite(x) or not 48<=x<=5000 for x in value):return []
+    return [round(x,2) for x in value]
 
 
 def scheduled_theme(now=None) -> str:
@@ -179,30 +188,43 @@ class SettingsStore:
                 # subsequent writes always go to the current user's profile.
                 source = source.with_name("ui.json")
             data = json.loads(source.read_text(encoding="utf-8"))
-            return UiSettings(
+            loaded = UiSettings(
                 theme="dark" if data.get("theme") == "dark" else "light",
                 zoom=max(50, min(200, int(data.get("zoom", 100)))),
                 appearance=normalize_appearance(data.get("appearance")),
                 remember_personalization=bool(data.get("remember_personalization", True)),
                 auto_theme=bool(data.get("auto_theme", False)),
                 about_theme=1 if data.get("about_theme") == 1 else 2,
+                language=data.get("language") if data.get("language") in {"ru","en","es"} else "ru",
+                order_columns=normalize_order_columns(data.get("order_columns")),
             )
+            result=loaded if loaded.remember_personalization or not self.profile else UiSettings(remember_personalization=False)
+            self._session=deepcopy(result)
+            return result
         except Exception:
             return UiSettings()
 
     def save(self, settings: UiSettings) -> None:
         from .appearance_config import normalize_appearance
-        if self.profile and not settings.remember_personalization:
-            self.path.unlink(missing_ok=True)
-            self._session = deepcopy(settings)
-            return
+        if self._session == settings: return
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(
             json.dumps({"theme": settings.theme, "zoom": settings.zoom,
                         "appearance": normalize_appearance(settings.appearance),
                         "remember_personalization": settings.remember_personalization,
-                        "auto_theme": settings.auto_theme, "about_theme": settings.about_theme}, ensure_ascii=False, indent=2),
+                        "auto_theme": settings.auto_theme, "about_theme": settings.about_theme, "language": settings.language, "order_columns": normalize_order_columns(settings.order_columns)}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         os.replace(tmp, self.path)
         self._session = deepcopy(settings)
+
+    def set_startup_enabled(self, settings, enabled):
+        try: data=json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError,ValueError):
+            self._session=None;self.save(settings)
+            data=json.loads(self.path.read_text(encoding="utf-8"))
+        data["remember_personalization"]=bool(enabled)
+        tmp=self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding="utf-8")
+        os.replace(tmp,self.path)
+        settings.remember_personalization=bool(enabled);self._session=deepcopy(settings)

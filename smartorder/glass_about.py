@@ -129,11 +129,11 @@ def build_about_page(owner):
                    '<a href="https://tmbsir.ru/" style="color:#0785ff;text-decoration:underline">tmbsir</a>')
     footer.setMaximumHeight(56)
     footer.anchorClicked.connect(QDesktopServices.openUrl)
+    root.addStretch(1)
     root.addWidget(footer)
     owner.about_session_label = QLabel()
     owner.about_session_label.setObjectName("SessionLabel")
     owner.about_session_label.setAlignment(Qt.AlignRight)
     root.addWidget(owner.about_session_label)
     owner._update_session_labels()
-    root.addStretch()
     return scroll

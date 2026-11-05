@@ -1,5 +1,6 @@
 """RC20 additions on top of the existing, tested RC18 desktop UI."""
 from __future__ import annotations
+from .i18n import source_text, tr
 
 import logging
 import json
@@ -207,7 +208,9 @@ class MainWindow(RC18MainWindow):
         self.workshop_manager=manager or (db.manager if isinstance(db,WorkshopDatabase) else WorkshopManager(db))
         allowed=allowed_workshops(user)
         if not allowed:raise RuntimeError("У роли нет доступных цехов. Обратитесь к администратору.")
-        if isinstance(db,WorkshopDatabase):key=db.workshop
+        if isinstance(db,WorkshopDatabase):
+            key=db.workshop if db.workshop in allowed else allowed[0]
+            if key!=db.workshop:db=self.workshop_manager.database(key,user)
         else:
             try:key=(local_state_dir()/f"workshop_{user.id}.txt").read_text().strip()
             except Exception:key=allowed[0]
@@ -343,11 +346,13 @@ class MainWindow(RC18MainWindow):
         view.itemDoubleClicked.connect(lambda *_:self._open_selected())
         old.parentWidget().layout().replaceWidget(old,view)
         old.hide();old.deleteLater();self.orders_table=view
+        from .workspace_ui import EmptyTableMessage
+        self.native_empty_orders=EmptyTableMessage(view,"Для начала работы создайте наряд.")
 
     def refresh_orders(self,*_):
         if not hasattr(self,"_live_signals") or self._live_closed:return
         self._orders_generation+=1
-        shift=self.order_filter_shift.currentText()
+        shift=source_text(self.order_filter_shift)
         query={"start":self.order_filter_date.startDate().toString("yyyy-MM-dd"),"end":self.order_filter_date.endDate().toString("yyyy-MM-dd"),"master":self.order_filter_master.currentData(),"department":self.order_filter_dep.currentData(),"shift":None if shift=="Все смены" else shift}
         self._orders_pending=(self._orders_generation,query)
         self._start_orders_read()
@@ -513,14 +518,16 @@ class MainWindow(RC18MainWindow):
         self.tabs.setCurrentIndex(0)
         self._analytics_order_overlay=None
         if any(role in ANALYTICS_ONLY_ROLES for role in split_roles(self.user.role)):
-            host=self.tabs.widget(0);overlay=QFrame(host);overlay.setObjectName("AnalyticsOrderOverlay");overlay.setStyleSheet("QFrame#AnalyticsOrderOverlay{background:rgba(8,12,20,178);border:1px solid rgba(130,150,180,150);border-radius:12px;} QLabel{color:#FFFFFF;font-size:26px;font-weight:900;background:transparent;}");ol=QVBoxLayout(overlay);msg=QLabel("Недоступно");msg.setAlignment(Qt.AlignCenter);ol.addWidget(msg);overlay.setGeometry(host.rect());overlay.raise_();overlay.show();self._analytics_order_overlay=overlay
+            from .workspace_ui import ActionAccessOverlay
+            self._analytics_order_overlay=ActionAccessOverlay(self.create_order_btn.parentWidget())
         self._enterprise_building=False
+        self.zoom.sliderReleased.connect(self._rc18_commit_zoom)
 
     def resizeEvent(self,event):
         super().resizeEvent(event)
         overlay=getattr(self,"_analytics_order_overlay",None)
         if overlay is not None:
-            host=self.tabs.widget(0);overlay.setGeometry(host.rect());overlay.raise_()
+            overlay.setGeometry(overlay.parentWidget().rect());overlay.raise_()
 
     def _apply_native_titlebars(self):
         from .native_chrome import apply_frame
@@ -540,47 +547,75 @@ class MainWindow(RC18MainWindow):
             for button in self.titlebar.controls:button.update()
 
     def _replace_tab(self,index,widget,title):
-        # Theme every newly constructed child before it becomes visible.
-        from .heavy_styles import set_theme_recursive
-        host = self.tabs.widget(index)
-        if host is not None:
-            widget.setParent(host, Qt.Widget)
-            widget.hide()
-        set_theme_recursive(widget,self.ui_settings.theme)
+        host=self.tabs.widget(index)
+        widget.setParent(host,Qt.Widget);widget.setAttribute(Qt.WA_DontCreateNativeAncestors,True);widget.hide()
         from .liquid_effects import apply_liquid_surface
-        apply_liquid_surface(widget, self.ui_settings.theme)
-        return super()._replace_tab(index,widget,title)
+        from .workspace_ui import apply_page_scale
+        from .i18n import apply_language
+        apply_liquid_surface(widget,self.ui_settings.theme)
+        apply_page_scale(widget,self.ui_settings.appearance,100 if index==4 else self.ui_settings.zoom)
+        apply_language(widget,self.ui_settings.language)
+        return super()._replace_tab(index,widget,tr(title))
 
     def _tab_changed(self,index):
         if getattr(self,"_building_tab",False) or getattr(self,"_enterprise_building",False):return
-        if index in (4,5,6):
-            if index==4 and not any(role in ANALYTICS_ROLES for role in split_roles(self.user.role)):return
-            if index not in self._loaded_tabs:
-                self._building_tab=True;self.tabs.setUpdatesEnabled(False)
-                try:
-                    widget=AnalyticsWidget(self) if index==4 else self._build_personalization_tab() if index==5 else self._build_about_tab()
-                    if index==4:self.analytics=widget
-                    self._replace_tab(index,widget,{4:"Аналитика",5:"Персонализация",6:"О приложении"}[index]);self._loaded_tabs.add(index)
-                finally:self.tabs.setUpdatesEnabled(True);self._building_tab=False
-            self._fade_current_tab()
-        else:super()._tab_changed(index)
-        if index == 4 and self.analytics is not None and self.analytics.dark != (self.ui_settings.theme == "dark"):
-            self.analytics.set_theme(self.ui_settings.theme)
-        self._update_zoom_mode()
+        if index not in self._loaded_tabs and index in range(1,7):
+            builders={1:self._build_catalog_tab,2:self._build_employees_tab,3:self._build_admin_tab,4:lambda:AnalyticsWidget(self),5:self._build_personalization_tab,6:self._build_about_tab}
+            titles={1:"Номенклатура",2:"Сотрудники",3:"Администрирование",4:"Аналитика",5:"Персонализация",6:"О приложении"}
+            self._building_tab=True
+            try:
+                widget=builders[index]()
+                if index==4:self.analytics=widget
+                self._replace_tab(index,widget,titles[index]);self._loaded_tabs.add(index)
+                if index==3:self.refresh_users();self.refresh_audit();self.refresh_backups()
+            finally:self._building_tab=False
+        if index==4 and self.analytics is not None and self.analytics.dark!=(self.ui_settings.theme=="dark"):self.analytics.set_theme(self.ui_settings.theme)
+        self._update_zoom_mode();self._apply_current_page_scale()
+        from .i18n import apply_language
+        apply_language(self.tabs.currentWidget(),self.ui_settings.language)
+        if index in getattr(self,"_rc12_dirty_tabs",set()):QTimer.singleShot(0,self._rc12_refresh_active_if_dirty)
 
     def _update_zoom_mode(self):
-        # The same toolbar and visual scale stay active on every tab.
-        if not hasattr(self, "zoom_message"): return
-        self.zoom_message.hide()
-        self.zoom.setEnabled(True); self.zoom.show(); self.zoom_label.show()
-        for shortcut in getattr(self, "_rc18_shortcuts", []): shortcut.setEnabled(True)
-        self._analytics_zoom_active = False
+        if not hasattr(self,"zoom_message"):return
+        from .i18n import tr
+        analytics=self.tabs.currentIndex()==4;self._analytics_zoom_active=analytics
+        self.zoom_message.setText(tr("В данной вкладке функция масштаба недоступна"));self.zoom_message.setVisible(analytics)
+        self.zoom.setVisible(not analytics);self.zoom.setEnabled(not analytics);self.zoom_label.setVisible(not analytics)
+        if hasattr(self,"scale_caption"):self.scale_caption.setVisible(not analytics)
+        self.theme.setVisible(self.tabs.currentIndex()!=5);self.theme_caption.setVisible(self.tabs.currentIndex()!=5)
+        for shortcut in getattr(self,"_rc18_shortcuts",[]):shortcut.setEnabled(not analytics)
 
-    def _apply_zoom(self, value):
-        return super()._apply_zoom(value)
+    def _apply_zoom(self,value):
+        value=max(50,min(200,int(value)))
+        if getattr(self,"_analytics_zoom_active",False):
+            old=self.zoom.blockSignals(True);self.zoom.setValue(self.ui_settings.zoom);self.zoom.blockSignals(old);return
+        self.ui_settings.zoom=value
+        if hasattr(self,"zoom_label"):self.zoom_label.setText(f"{value}%")
+        timer=getattr(self,"_rc18_zoom_timer",None)
+        if timer is not None:
+            timer.stop()
+            if not self.zoom.isSliderDown():timer.start(120)
+
+    def _apply_current_page_scale(self):
+        if not hasattr(self,"tabs"):return
+        page=self.tabs.currentWidget()
+        if page is None or (self.tabs.currentIndex()==0 and getattr(self,"_glass",None) is not None):return
+        from .workspace_ui import apply_page_scale
+        # Lazy tabs contain a mounted page. Update the same root that received
+        # its initial typography so an older child stylesheet cannot win.
+        content=page.layout().itemAt(0).widget() if page.layout() and page.layout().count() else None
+        target=content if content is not None else page
+        apply_page_scale(target,self.ui_settings.appearance,100 if self.tabs.currentIndex()==4 else self.ui_settings.zoom)
+        page._page_scale_key=target._page_scale_key
+
+    def _set_visual_zoom(self,value):self._apply_current_page_scale()
 
     def _rc18_commit_zoom(self):
-        return super()._rc18_commit_zoom()
+        if getattr(self,"_analytics_zoom_active",False):return
+        self._apply_current_page_scale();self._ensure_tab_widths()
+        if getattr(self,"_last_saved_zoom",None)!=self.ui_settings.zoom:
+            self.settings_store.save(self.ui_settings);self._last_saved_zoom=self.ui_settings.zoom
+        if hasattr(self,"_schedule_glass_state"):self._schedule_glass_state()
 
     def _theme_toggled(self,checked):
         if self.ui_settings.auto_theme and not getattr(self, "_scheduled_change", False):
@@ -588,7 +623,7 @@ class MainWindow(RC18MainWindow):
         self.ui_settings.theme="dark" if checked else "light"
         self._apply_theme()
         self.settings_store.save(self.ui_settings)
-        self.theme_caption.setText("Тёмная тема" if checked else "Светлая тема")
+        self.theme_caption.setText(tr("Тёмная тема" if checked else "Светлая тема"))
         self._apply_admin_filter_theme()
         self.titlebar.set_theme(self.ui_settings.theme)
         self._apply_native_titlebars()
@@ -604,11 +639,23 @@ class MainWindow(RC18MainWindow):
                                (panel.remember, self.ui_settings.remember_personalization)]:
             previous = control.blockSignals(True)
             control.setChecked(value); control.blockSignals(previous)
-        panel.theme_label.setText("Тёмная тема" if self.ui_settings.theme == "dark" else "Светлая тема")
+        panel.theme_label.setText(tr("Тёмная тема" if self.ui_settings.theme == "dark" else "Светлая тема"))
 
     def set_remember_personalization(self, remember):
-        self.ui_settings.remember_personalization = bool(remember)
-        self.settings_store.save(self.ui_settings)
+        self.settings_store.set_startup_enabled(self.ui_settings,remember)
+
+    def set_language(self,code):
+        if code not in {"ru","en","es"}:return
+        self.ui_settings.language=code
+        from .i18n import set_language,apply_language
+        set_language(code);apply_language(self,code)
+        self.titlebar.badge.setText(f"{self.user.username}  ·  {tr(WORKSHOPS[self.workshop])}  ▾")
+        from .workspace_ui import align_action_sizes,EmptyTableMessage
+        for index in (1,2):
+            if index in self._loaded_tabs:align_action_sizes(self.tabs.widget(index),self.ui_settings.appearance,self.ui_settings.zoom)
+        for message in self.findChildren(EmptyTableMessage):message.refresh()
+        self._update_session_labels();self._update_zoom_mode();self.settings_store.save(self.ui_settings)
+        if hasattr(self,"_schedule_glass_state"):self._schedule_glass_state()
 
     def set_auto_theme(self, enabled):
         self.ui_settings.auto_theme = bool(enabled)
@@ -659,6 +706,51 @@ class MainWindow(RC18MainWindow):
             return
         return super()._sync_current_tab()
 
+    def _align_reference_actions(self,tab,people=False):
+        content=tab.widget() if isinstance(tab,QScrollArea) else tab
+        layout=content.layout()
+        add=next(b for b in content.findChildren(QPushButton) if b.text()=="Добавить")
+        imp=next(b for b in content.findChildren(QPushButton) if b.text()=="Загрузить из Excel")
+        def detach(parent,widget):
+            parent.removeWidget(widget)
+            for i in range(parent.count()):
+                child=parent.itemAt(i).layout()
+                if child is not None:detach(child,widget)
+        for button in (add,imp):detach(layout,button)
+        if people:
+            top=layout.itemAt(0).layout()
+            detach(layout,self.recent_deleted_btn)
+            form=layout.itemAt(1).layout();form.addWidget(self.recent_deleted_btn)
+        else:
+            top=QHBoxLayout();top.addStretch();layout.insertLayout(0,top)
+        for button,kind in [(add,"add"),(imp,"import")]:
+            button.setProperty("alignedAction",kind);top.addWidget(button)
+        content.setProperty("referencePage",True)
+        from .workspace_ui import align_action_sizes
+        align_action_sizes(content,self.ui_settings.appearance,self.ui_settings.zoom)
+        # Keep wide forms scrollable rather than enlarging the main window.
+        scroll=QScrollArea(self.tabs);scroll.setWidgetResizable(True);scroll.setFrameShape(QFrame.NoFrame);scroll.setWidget(content)
+        return scroll
+
+    def _build_catalog_tab(self):
+        tab=super()._build_catalog_tab()
+        from .workspace_ui import EmptyTableMessage
+        self.work_empty=EmptyTableMessage(self.work_table,"Для начала работы добавьте номенклатуру или загрузите её из Excel.",self.work_search)
+        return self._align_reference_actions(tab)
+
+    def _build_employees_tab(self):
+        tab=super()._build_employees_tab()
+        from .workspace_ui import EmptyTableMessage
+        self.people_empty=EmptyTableMessage(self.people_table,"Для начала работы добавьте сотрудников или загрузите их из Excel.",self.person_search)
+        return self._align_reference_actions(tab,True)
+
+    def refresh_people(self):
+        super().refresh_people()
+        from .i18n import apply_widget
+        for name in ("person_form_label","person_name","person_search","people_results_label"):
+            widget=getattr(self,name,None)
+            if widget is not None:widget._i18n_language=None;apply_widget(widget)
+
     def _build_admin_tab(self):
         tab=super()._build_admin_tab()
         content=tab.widget() if isinstance(tab,QScrollArea) else tab
@@ -699,6 +791,7 @@ class MainWindow(RC18MainWindow):
         self.ui_settings.appearance = normalize_appearance(appearance)
         self.settings_store.save(self.ui_settings)
         self._apply_theme()
+        self._apply_current_page_scale()
         fonts = self.ui_settings.appearance["fonts"]
         self.titlebar.setFixedHeight(max(47, round(max(fonts["window_title"]["size"], fonts["caption"]["size"])) + 20))
         self._ensure_tab_widths()
@@ -727,34 +820,37 @@ class MainWindow(RC18MainWindow):
         menu.popup(self.titlebar.badge.mapToGlobal(self.titlebar.badge.rect().bottomLeft()))
 
     def _switch_to_workshop(self,key):
-        if key==self.workshop:return self
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        loading=QDialog(self,Qt.FramelessWindowHint|Qt.Tool)
-        loading.setModal(False);loading.setFixedSize(320,132)
-        loading.setObjectName("WorkshopLoadingDialog")
-        loading_layout=QVBoxLayout(loading);loading_layout.setContentsMargins(22,18,22,18);loading_layout.setSpacing(10)
-        loading_label=QLabel("Переключение рабочего пространства…");loading_label.setAlignment(Qt.AlignCenter);loading_layout.addWidget(loading_label)
-        progress=QProgressBar();progress.setRange(0,0);progress.setTextVisible(False);progress.setFixedHeight(8);loading_layout.addWidget(progress)
-        loading.setStyleSheet("QDialog#WorkshopLoadingDialog{background:#FFFFFF;border:1px solid #C8C8CE;border-radius:12px;} QLabel{color:#1D1D1F;font-weight:700;} QProgressBar{border:0;background:#E5E5EA;border-radius:4px;} QProgressBar::chunk{background:#007AFF;border-radius:4px;}")
-        if self.ui_settings.theme=="dark":
-            loading.setStyleSheet("QDialog#WorkshopLoadingDialog{background:#2C2C2E;border:1px solid #55565A;border-radius:12px;} QLabel{color:#F5F5F7;font-weight:700;} QProgressBar{border:0;background:#444446;border-radius:4px;} QProgressBar::chunk{background:#0A84FF;border-radius:4px;}")
-        loading.move(self.frameGeometry().center()-loading.rect().center());loading.show();QApplication.processEvents()
-        new_window=None
-        try:
-            db=self.workshop_manager.database(key,self.user)
-            new_window=type(self)(db,self.user,self.workshop_manager,self.session_tracker)
-            self.session_tracker.switch(key)
-        except Exception as exc:
-            if new_window is not None:
-                new_window._switching=True;new_window._rc4_exit_confirmed=True;new_window.close();new_window.deleteLater()
-            set_active_workshop(self.workshop);QMessageBox.warning(self,"Цех",str(exc));return
-        finally:
-            QApplication.restoreOverrideCursor()
-            loading.close();loading.deleteLater()
-        app=QApplication.instance();app._smartorder_main_window=new_window
-        new_window.showFullScreen() if self.isFullScreen() else new_window.showMaximized() if self.isMaximized() else new_window.show()
-        self._switching=True;self._rc4_exit_confirmed=True;self.close();self.deleteLater()
-        return new_window
+        if key==self.workshop or getattr(self,"_workshop_switching",False) or key not in allowed_workshops(self.user):return self
+        from .workspace_ui import WorkshopLoadingDialog
+        self._workshop_switching=True;self._workshop_loading=WorkshopLoadingDialog(key,self);self._workshop_loading.show();self.titlebar.badge.setEnabled(False)
+        manager,user=self.workshop_manager,self.user
+        def prepare():
+            try:
+                db=manager.database(key,user);db.get_employees(True);db.get_departments();self.session_tracker.switch(key)
+                return key,db,""
+            except Exception as exc:return key,None,str(exc)
+        self._read_section("workshop_switch",prepare)
+        return self
+
+    def _apply_workshop_switch(self,result):
+        key,db,error=result;loading=self._workshop_loading;self._workshop_switching=False;self.titlebar.badge.setEnabled(True)
+        if error:
+            loading.close();loading.deleteLater();QMessageBox.warning(self,"Цех",error);return
+        self._orders_generation+=1;self._history_generation+=1
+        self.db=db;self.workshop=key;set_active_workshop(key);self._display_orders=None;self._live_tokens=None
+        self.orders_table.report_model.set_rows([]);self._rc12_dirty_tabs.update({0,1,2,3})
+        from .i18n import tr
+        self.titlebar.badge.setText(f"{self.user.username}  ·  {tr(WORKSHOPS[key])}  ▾")
+        self._refresh_reference_filters();self.tabs.setCurrentIndex(0);self.refresh_orders()
+        try:(local_state_dir()/f"workshop_{self.user.id}.txt").write_text(key)
+        except OSError:pass
+        if hasattr(self,"_schedule_glass_state"):self._schedule_glass_state()
+        if self.analytics is not None:self.analytics.reload()
+        self._workshop_loading_timer=QTimer(self);self._workshop_loading_timer.setInterval(30)
+        def finish():
+            if self._orders_running or self._orders_pending is not None:return
+            self._workshop_loading_timer.stop();loading.close();loading.deleteLater()
+        self._workshop_loading_timer.timeout.connect(finish);self._workshop_loading_timer.start()
 
     def open_diagnostics_center(self):
         from .live_ui import LiveDiagnosticsDialog

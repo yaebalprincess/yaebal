@@ -19,6 +19,7 @@ from .security import Permission
 from .ui_controls import SearchComboBox, ReportTable
 from .heavy_ui import DateRangeEdit
 from .appearance import appearance_of, font_for
+from .i18n import tr
 
 COLORS = ["#16B9B0", "#7C71F5", "#ED71A7", "#F6AD68", "#42A5F5", "#A3BC64"]
 
@@ -108,7 +109,7 @@ class AnimatedChart(QWidget):
         p.setPen(QPen(QColor(pal["grid"]),1));p.setBrush(QColor(pal["card"]));p.drawRoundedRect(QRectF(self.rect()).adjusted(1,1,-1,-1),18,18)
         appearance = appearance_of(self)
         zoom = getattr(QApplication.instance(), "_smartorder_stylesheet_zoom", 100)
-        p.setPen(QColor(pal["text"]));p.setFont(font_for("table_header",zoom,appearance));p.drawText(QRectF(20,14,self.width()-40,30),Qt.AlignLeft|Qt.AlignVCenter,self.title)
+        p.setPen(QColor(pal["text"]));p.setFont(font_for("table_header",zoom,appearance));p.drawText(QRectF(20,14,self.width()-40,30),Qt.AlignLeft|Qt.AlignVCenter,tr(self.title))
         p.setFont(font_for("table",zoom,appearance));self._hits=[]
         if not self.values:
             p.setPen(QColor(pal["muted"]));p.drawText(self.rect(),Qt.AlignCenter,"Нет данных за выбранный период");return
