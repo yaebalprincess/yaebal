@@ -1,3 +1,21 @@
+# Smart Order · Liquid Glass v7
+
+- [Скачать SmartOrder v7 — ZIP исходников](https://github.com/yaebalprincess/yaebal/archive/refs/heads/smartorder-liquid-glass-v7.zip)
+- [Исходники, запуск и изменения](https://github.com/yaebalprincess/yaebal/tree/smartorder-liquid-glass-v7)
+- [Руководство пользователя — PDF](https://github.com/yaebalprincess/yaebal/blob/smartorder-liquid-glass-v7/docs/SmartOrder_User_Guide_v7.pdf)
+- [Проверки и ограничения](https://github.com/yaebalprincess/yaebal/blob/smartorder-liquid-glass-v7/LIQUID_GLASS_V7_QA.md)
+
+Быстрый отклик тумблера темы, вкладки без обрезки при масштабе, стеклянные списки,
+индивидуальные права пользователей, отложенная активация учётных записей,
+восемь языков и перенос персонализации через JSON или общую базу.
+Роль «Аналитик» заменена на «Экономист»; уведомления экономисту доступны.
+
+Для новых прав и синхронизации обновите все клиенты общей базы до v7.
+Архив содержит исходники и скрипты сборки, без готового Windows EXE.
+Сохраните `resources` своей установки. Подробности запуска и проверки — в README архива.
+
+---
+
 # Smart Order · Liquid Glass v6
 
 - [Скачать SmartOrder v6 — ZIP исходников](https://github.com/yaebalprincess/yaebal/archive/refs/heads/smartorder-liquid-glass-v6.zip)
