@@ -249,8 +249,46 @@ class MainWindow(RC18MainWindow):
         self._rc12_watch_timer.setInterval(1500)
         for archive_key in allowed_workshops(user):self.workshop_manager.archive_publisher.request(archive_key,self.workshop_manager._databases[archive_key])
         self._archive_retry_at=0.0
+        self._account_timer=QTimer(self);self._account_timer.setInterval(5000);self._account_timer.timeout.connect(self._read_account_access)
+        if user.id>0:self._account_timer.start()
         try:(local_state_dir()/f"workshop_{user.id}.txt").write_text(key)
         except OSError:pass
+
+    def _read_account_access(self):
+        from .account_store import account_snapshot
+        auth,uid=self.workshop_manager.auth,self.user.id
+        if uid>0:self._read_section("account_access",lambda:account_snapshot(auth,uid))
+
+    def _apply_account_access(self,user):
+        signature=(user.username,user.role,tuple(sorted(user.permissions))) if user is not None else ("disabled",self.user.id)
+        current=(self.user.username,self.user.role,tuple(sorted(self.user.permissions))) if getattr(self,"_account_active",True) else ("disabled",self.user.id)
+        if signature==current:return
+        self._account_active=user is not None
+        if user is None:user=SessionUser(self.user.id,self.user.username,self.user.role,frozenset())
+        self.user=user;self.db.user=user;self.session_tracker.user=user
+        self._update_permission_controls()
+        if not user.can(Permission.ORDERS_VIEW):
+            self._orders_generation+=1;self._orders_pending=None;self._display_orders=None;self.orders_table.report_model.set_rows([]);self.info_users_list.clear()
+        if 3 in self._loaded_tabs:
+            host=self.tabs.widget(3);self._apply_admin_permissions(host);self._visible_users=None;self.refresh_users();self.refresh_audit()
+        for index,prefix in ((1,"catalog"),(2,"employees")):
+            if index in self._loaded_tabs:
+                for button in self.tabs.widget(index).findChildren(QPushButton):
+                    kind=button.property("alignedAction")
+                    if kind:button.setEnabled(self.can(prefix+(".create" if kind=="add" else ".import")))
+                self._reference_permissions(prefix)
+        self.titlebar.badge.setText(f"{user.username}  ·  {tr(WORKSHOPS[self.workshop])}  ▾")
+        self.titlebar.badge.setToolTip(user.role if self._account_active else tr("Учётная запись отключена. Войдите заново."))
+        choices=allowed_workshops(user)
+        if self._account_active and self.workshop not in choices and choices:self._switch_to_workshop(choices[0])
+        elif self._account_active and self.can(Permission.ORDERS_VIEW):self.refresh_orders()
+        if self.analytics is not None:
+            self.analytics.user=user
+            self.analytics.export.setEnabled(bool(self.analytics.report) and user.can(Permission.ANALYTICS_EXPORT))
+            if user.can(Permission.ANALYTICS_VIEW):
+                self.analytics=AnalyticsWidget(self);self._replace_tab(4,self.analytics,"Аналитика")
+            self._rc12_dirty_tabs.add(4)
+        if hasattr(self,"_schedule_glass_state"):self._schedule_glass_state()
 
     def _read_section(self,name,reader):
         if not hasattr(self,'_live_signals') or self._live_closed:return
@@ -289,12 +327,15 @@ class MainWindow(RC18MainWindow):
         from .heavy_styles import set_theme_recursive
         try:
             for i,r in enumerate(rows):
-                uid,username,role,active=int(r[0]),str(r[1]),str(r[2]),bool(r[3])
+                uid,username,role,active=int(r[0]),str(r[1]),";".join(split_roles(r[2])),bool(r[3])
                 self.users_table.setItem(i,0,heavy_ui.make_item(username,uid));self.users_table.setItem(i,1,heavy_ui.make_item(role));self.users_table.setItem(i,2,heavy_ui.make_item(('Активируется '+str(r[4]).replace('T',' ')) if len(r)>4 and r[4] else ('Активен' if active else 'Отключён')))
-                host=QWidget();h=QHBoxLayout(host);h.setContentsMargins(4,4,4,4);h.setSpacing(8)
+                target=frozenset(json.loads(r[5])) if len(r)>5 and r[5] is not None else self.workshop_manager.auth.role_permissions(role)
+                can_manage=admin and (self.can(Permission.PERMISSIONS_MANAGE) or target<=self.user.permissions)
+                host=QWidget();host.setProperty("targetPermissions",list(target));host.setProperty("hasManagementHandlers",can_manage)
+                h=QHBoxLayout(host);h.setContentsMargins(4,4,4,4);h.setSpacing(8)
                 edit=QPushButton('Изменить');edit.setObjectName('UserEditButton');delete=QPushButton('Удалить');delete.setObjectName('UserDeleteButton');toggle=QPushButton('Отключить' if active else 'Включить');toggle.setObjectName('UserToggleButton')
-                for button in (edit,delete,toggle):button.setEnabled(admin);h.addWidget(button)
-                if admin:
+                for button in (edit,delete,toggle):button.setEnabled(can_manage);h.addWidget(button)
+                if can_manage:
                     edit.clicked.connect(lambda _,u=uid,n=username,rn=role:self._edit_user_by_id(u,n,rn));delete.clicked.connect(lambda _,u=uid,n=username:self._delete_user_by_id(u,n));toggle.clicked.connect(lambda _,u=uid,a=active:self._toggle_user_by_id(u,a))
                 h.addStretch();self.users_table.setCellWidget(i,3,host);self.users_table.setRowHeight(i,62)
                 set_theme_recursive(host,self.ui_settings.theme)
@@ -328,7 +369,7 @@ class MainWindow(RC18MainWindow):
         finally:self.audit_table.setUpdatesEnabled(True)
 
     def refresh_backups(self):
-        if not hasattr(self,'backup_combo') or not self.can(Permission.BACKUP_MANAGE):return
+        if not hasattr(self,'backup_combo') or not any(self.can(code) for code in (Permission.BACKUP_MANAGE,Permission.BACKUP_RESTORE,Permission.BACKUP_DELETE)):return
         from .desktop_live import drafts_folder
         folder=drafts_folder(self.workshop_manager.root,self.workshop).parent/'backups'/'manual'
         self._read_section('backups',lambda:[(p.name,str(p)) for p in sorted(folder.glob('*.db'),reverse=True)])
@@ -355,6 +396,8 @@ class MainWindow(RC18MainWindow):
 
     def refresh_orders(self,*_):
         if not hasattr(self,"_live_signals") or self._live_closed:return
+        if not self.can(Permission.ORDERS_VIEW):
+            self._orders_pending=None;self.orders_table.report_model.set_rows([]);return
         self._orders_generation+=1
         shift=source_text(self.order_filter_shift)
         query={"start":self.order_filter_date.startDate().toString("yyyy-MM-dd"),"end":self.order_filter_date.endDate().toString("yyyy-MM-dd"),"master":self.order_filter_master.currentData(),"department":self.order_filter_dep.currentData(),"shift":None if shift=="Все смены" else shift}
@@ -403,7 +446,7 @@ class MainWindow(RC18MainWindow):
         self.delete_draft_btn.setEnabled(draft and self.can(Permission.ORDERS_DELETE_DRAFT))
         self._history_generation+=1;generation=self._history_generation;self.info_users_list.clear()
         if draft:self.info_users_list.addItem("Общий черновик");return
-        if not isinstance(ref,int):return
+        if not isinstance(ref,int) or not self.can(Permission.ORDERS_HISTORY):return
         db,signals=self.db,self._live_signals
         def worker():
             try:history=list(reversed(db.order_history(ref)));error=""
@@ -656,11 +699,73 @@ class MainWindow(RC18MainWindow):
     def _orders_top_restricted(self):
         return not any(self.can(code) for code in (Permission.ORDERS_CREATE,Permission.ORDERS_EDIT,Permission.ORDERS_EXPORT,Permission.ORDERS_FILTER,Permission.ORDERS_HISTORY,Permission.ORDERS_DELETE_DRAFT))
 
+    def _refresh_visible_tab(self):
+        from PyQt5 import sip
+        if not sip.isdeleted(self) and not getattr(self,"_live_closed",False):self._tab_changed(self.tabs.currentIndex())
+
+    def _reference_permissions(self,prefix):
+        stem="work" if prefix=="catalog" else "person"
+        table=getattr(self,stem+"_table",None) if prefix=="catalog" else getattr(self,"people_table",None)
+        recent=getattr(self,"_show_recent_deleted_work" if prefix=="catalog" else "_show_recent_deleted_people",False)
+        selected=table is not None and table.currentRow()>=0 and not recent
+        for kind in ("edit","save","delete"):
+            button=getattr(self,stem+"_"+kind+"_btn",None)
+            if button is not None:
+                code=prefix+(".delete" if kind=="delete" else ".edit")
+                button.setProperty("requiredPermission",code)
+                button.setEnabled(self.can(code) and (button.isEnabled() if kind=="save" else selected))
+        for name in (("work_name","work_code","work_price") if prefix=="catalog" else ("person_name",)):
+            widget=getattr(self,name,None)
+            if widget is not None:widget.setEnabled(self.can(prefix+".create") or self.can(prefix+".edit"))
+
+    def _heavy_work_selection(self):
+        super()._heavy_work_selection();self._reference_permissions("catalog")
+
+    def _heavy_people_selection(self):
+        super()._heavy_people_selection();self._reference_permissions("employees")
+
+    def _open_selected(self):
+        if not self.can(Permission.ORDERS_VIEW):return
+        ref=self._selected_ref()
+        if isinstance(ref,int) and not self.can(Permission.ORDERS_EDIT):
+            self.open_notification_order({"workshop_key":self.workshop,"order_id":ref});return
+        return super()._open_selected()
+
+    def export_order(self):
+        try:
+            self.workshop_manager.require(self.user,Permission.ORDERS_EXPORT)
+            return super().export_order()
+        except Exception as exc:QMessageBox.warning(self,tr("Недоступно"),str(exc))
+
+    def _orders_context_menu(self,pos):
+        item=self.orders_table.itemAt(pos)
+        if item is None:return
+        self.orders_table.selectRow(item.row());ref=self._selected_ref();menu=QMenu(self)
+        entries=[("Просмотреть наряд",Permission.ORDERS_VIEW,self._open_selected,ref is not None),
+            ("Редактировать",Permission.ORDERS_EDIT,self.edit_order,ref is not None),
+            ("Выгрузить в Excel",Permission.ORDERS_EXPORT,self.export_order,isinstance(ref,int)),
+            ("Удалить черновик",Permission.ORDERS_DELETE_DRAFT,self.delete_selected_draft,isinstance(ref,str)),
+            ("ИСТОРИЯ РЕДАКТИРОВАНИЙ",Permission.ORDERS_HISTORY,self._show_history_details,isinstance(ref,int))]
+        actions={}
+        for title,code,callback,selected in entries:
+            action=menu.addAction(tr(title));action.setEnabled(selected and self.can(code));actions[action]=(code,callback)
+        result=menu.exec_(self.orders_table.viewport().mapToGlobal(pos))
+        if result in actions:
+            code,callback=actions[result]
+            try:self.workshop_manager.require(self.user,code);callback()
+            except Exception as exc:QMessageBox.warning(self,tr("Недоступно"),str(exc))
+
     def _update_permission_controls(self):
         if not hasattr(self,"tabs"):return
         from .interaction_ui import RestrictedArea
+        previous=self.tabs.currentIndex();blocked=self.tabs.blockSignals(True)
         for index,permission in enumerate((Permission.ORDERS_VIEW,Permission.CATALOG_VIEW,Permission.EMPLOYEES_VIEW,Permission.ADMIN_VIEW,Permission.ANALYTICS_VIEW)):
             self.tabs.setTabEnabled(index,self.can(permission))
+        target=previous if self.tabs.isTabEnabled(previous) else next(i for i in range(self.tabs.count()) if self.tabs.isTabEnabled(i))
+        self.tabs.setCurrentIndex(target);self.tabs.blockSignals(blocked)
+        if target!=previous:
+            if hasattr(self,"_live_signals") and not getattr(self,"_enterprise_building",False):self._tab_changed(target)
+            else:QTimer.singleShot(0,self._refresh_visible_tab)
         if hasattr(self,"create_order_btn"):
             self.create_order_btn.setEnabled(self.can(Permission.ORDERS_CREATE))
             self.delete_draft_btn.setVisible(True);self.info_panel.setVisible(True)
@@ -672,12 +777,18 @@ class MainWindow(RC18MainWindow):
                 overlay=RestrictedArea(self.tabs.widget(0),[self.order_filter_date,self.create_order_btn.parentWidget(),self.info_panel]);self._analytics_order_overlay=overlay
             if overlay is not None:overlay.setVisible(restricted)
         if hasattr(self,"titlebar"):
-            self.titlebar.bell.setVisible(self.can(Permission.NOTIFICATIONS_VIEW));self.titlebar.badge.setEnabled(True)
+            self.titlebar.bell.setVisible(self.can(Permission.NOTIFICATIONS_VIEW));self.titlebar.badge.setEnabled(getattr(self,"_account_active",True))
+        if hasattr(self,"_notification_timer"):
+            if self.can(Permission.NOTIFICATIONS_VIEW):self._notification_timer.start()
+            else:
+                self._notification_timer.stop()
+                if self.notification_popup is not None:self.notification_popup.close()
         if hasattr(self,"users_table"):
             for index in range(self.users_table.rowCount()):
                 cell=self.users_table.cellWidget(index,3)
                 if cell is not None:
-                    for button in cell.findChildren(QPushButton):button.setEnabled(self.can(Permission.USERS_MANAGE))
+                    permitted=self.can(Permission.USERS_MANAGE) and (self.can(Permission.PERMISSIONS_MANAGE) or set(cell.property("targetPermissions") or [])<=set(self.user.permissions))
+                    for button in cell.findChildren(QPushButton):button.setEnabled(permitted and bool(cell.property("hasManagementHandlers")))
 
     def add_user(self):
         if not self.can(Permission.USERS_MANAGE):return
@@ -846,7 +957,9 @@ class MainWindow(RC18MainWindow):
         else:
             top=QHBoxLayout();top.addStretch();layout.insertLayout(0,top)
         for button,kind in [(add,"add"),(imp,"import")]:
-            button.setProperty("alignedAction",kind);top.addWidget(button)
+            button.setProperty("alignedAction",kind);button.setVisible(True)
+            button.setEnabled(self.can(("employees" if people else "catalog")+(".create" if kind=="add" else ".import")));top.addWidget(button)
+        self._reference_permissions("employees" if people else "catalog")
         content.setProperty("referencePage",True)
         from .workspace_ui import align_action_sizes
         align_action_sizes(content,self.ui_settings.appearance,self.ui_settings.zoom)
@@ -897,22 +1010,28 @@ class MainWindow(RC18MainWindow):
                 self._admin_filter_labels.append(label)
         self._apply_admin_filter_theme()
         label=QLabel("Общие учётные записи и сессии: "+str(self.workshop_manager.auth.path));label.setWordWrap(True);label.setTextInteractionFlags(Qt.TextSelectableByMouse);content.layout().addWidget(label)
-        b=QPushButton("Резервная копия учётных записей и сессий");b.setObjectName("IdentityBackupButton");b.clicked.connect(self.backup_identity);b.setEnabled(self.can(Permission.IDENTITY_BACKUP));content.layout().addWidget(b)
+        b=QPushButton("Резервная копия учётных записей и сессий");b.setObjectName("IdentityBackupButton");b.setProperty("requiredPermission",Permission.IDENTITY_BACKUP);b.clicked.connect(self.backup_identity);b.setEnabled(self.can(Permission.IDENTITY_BACKUP));content.layout().addWidget(b)
         self._apply_admin_permissions(content)
         return tab
 
     def _apply_admin_permissions(self,content):
-        checks={"Добавить пользователя":Permission.USERS_MANAGE,"Разрешительный режим":Permission.USERS_MANAGE,"Создать бэкап":Permission.BACKUP_MANAGE,"Восстановить":Permission.BACKUP_RESTORE,"Удалить":Permission.BACKUP_DELETE,"Создать архивный снимок":Permission.BACKUP_MANAGE,"Открыть архивный снимок":Permission.BACKUP_MANAGE,"Создать лог":Permission.AUDIT_VIEW,"Центр диагностики":Permission.DIAGNOSTICS_VIEW,"Обновить патч":Permission.APP_UPDATE,"Синхронизировать":Permission.DATA_SYNC}
+        checks={"Синхронизация":Permission.DATA_SYNC,"⟳  Синхронизация":Permission.DATA_SYNC,"Архивный снимок":Permission.BACKUP_MANAGE,"Открыть архивные снимки":Permission.BACKUP_MANAGE,"Собрать логи":Permission.AUDIT_VIEW,"↶ Восстановить":Permission.BACKUP_RESTORE,"Добавить пользователя":Permission.USERS_MANAGE,"Разрешительный режим":Permission.ACCESS_CONTROL,"Создать бэкап":Permission.BACKUP_MANAGE,"Восстановить":Permission.BACKUP_RESTORE,"Удалить":Permission.BACKUP_DELETE,"Создать архивный снимок":Permission.BACKUP_MANAGE,"Открыть архивный снимок":Permission.BACKUP_MANAGE,"Создать лог":Permission.AUDIT_VIEW,"Центр диагностики":Permission.DIAGNOSTICS_VIEW,"Обновить патч":Permission.APP_UPDATE,"Синхронизировать":Permission.DATA_SYNC}
         from PyQt5.QtWidgets import QAbstractButton,QGroupBox
         for button in content.findChildren(QAbstractButton):
-            code=checks.get(button.text())
+            from .i18n import REVERSE
+            code=button.property("requiredPermission") or checks.get(REVERSE.get(button.text(),button.text()))
             if code:button.setEnabled(self.can(code));button.setProperty("requiredPermission",code)
-        for name,code in (("access_control_check",Permission.USERS_MANAGE),("diagnostics_center_btn",Permission.DIAGNOSTICS_VIEW),("update_patch_btn",Permission.APP_UPDATE)):
+        for name,code in (("access_control_check",Permission.ACCESS_CONTROL),("admin_sync_btn",Permission.DATA_SYNC),("diagnostics_center_btn",Permission.DIAGNOSTICS_VIEW),("update_patch_btn",Permission.APP_UPDATE)):
             widget=getattr(self,name,None)
             if widget is not None:widget.setEnabled(self.can(code))
         for name,code in (("users_table",Permission.USERS_VIEW),("audit_table",Permission.AUDIT_VIEW)):
             widget=getattr(self,name,None)
-            if widget is not None:widget.setEnabled(self.can(code) or code==Permission.USERS_VIEW and self.can(Permission.USERS_MANAGE))
+            if widget is not None:
+                allowed=self.can(code) or code==Permission.USERS_VIEW and self.can(Permission.USERS_MANAGE)
+                widget.setEnabled(allowed);group=widget.parentWidget()
+                while group is not None and not isinstance(group,QGroupBox):group=group.parentWidget()
+                if group is not None:group.setEnabled(allowed)
+        if hasattr(self,"backup_combo"):self.backup_combo.setEnabled(any(self.can(code) for code in (Permission.BACKUP_MANAGE,Permission.BACKUP_RESTORE,Permission.BACKUP_DELETE)))
 
     def _apply_admin_filter_theme(self):
         labels=getattr(self,"_admin_filter_labels",())
@@ -922,7 +1041,7 @@ class MainWindow(RC18MainWindow):
         css=f"background:{c['field']};color:{c['ink']};border:1px solid {c['line']};"
         css += "padding:4px 7px;border-radius:4px;"
         for label in labels:
-            label.setStyleSheet(css)
+            label.setStyleSheet("QLabel{"+css+"}QLabel:disabled{color:"+c['disabled']+";}")
 
     def set_appearance(self, appearance):
         from .appearance_config import normalize_appearance
@@ -934,6 +1053,30 @@ class MainWindow(RC18MainWindow):
         self.titlebar.setFixedHeight(max(47, round(max(fonts["window_title"]["size"], fonts["caption"]["size"])) + 20))
         self._ensure_tab_widths()
         self.update()
+
+    def create_backup(self):
+        try:
+            self.workshop_manager.require(self.user,Permission.BACKUP_MANAGE)
+            return super().create_backup()
+        except Exception as exc:QMessageBox.warning(self,tr("Недоступно"),str(exc))
+
+    def delete_backup(self):
+        try:
+            self.workshop_manager.require(self.user,Permission.BACKUP_DELETE)
+            return super().delete_backup()
+        except Exception as exc:QMessageBox.warning(self,tr("Недоступно"),str(exc))
+
+    def open_archive_snapshots(self):
+        try:
+            self.workshop_manager.require(self.user,Permission.BACKUP_MANAGE)
+            return super().open_archive_snapshots()
+        except Exception as exc:QMessageBox.warning(self,tr("Недоступно"),str(exc))
+
+    def create_archive_snapshot(self):
+        try:
+            self.workshop_manager.require(self.user,Permission.BACKUP_MANAGE)
+            return super().create_archive_snapshot()
+        except Exception as exc:QMessageBox.warning(self,tr("Недоступно"),str(exc))
 
     def backup_identity(self):
         try:
@@ -965,7 +1108,7 @@ class MainWindow(RC18MainWindow):
         return self
 
     def _apply_workshop_switch(self,result):
-        key,db,error=result;loading=self._workshop_loading;self._workshop_switching=False;self.titlebar.badge.setEnabled(True)
+        key,db,error=result;loading=self._workshop_loading;self._workshop_switching=False;self.titlebar.badge.setEnabled(getattr(self,"_account_active",True))
         if error:
             loading.close();loading.deleteLater();QMessageBox.warning(self,"Цех",error);return
         self._orders_generation+=1;self._history_generation+=1

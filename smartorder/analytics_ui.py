@@ -279,7 +279,7 @@ class AnalyticsWidget(QWidget):
             combo=SearchComboBox();combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon);combo.setMinimumContentsLength(12);combo.setMinimumWidth(115);combo.setMaximumWidth(360);combo.addItem("Все",None);combo.currentIndexChanged.connect(self._apply_filters);self.production_filters[field]=combo
             selection.addWidget(QLabel(label));selection.addWidget(combo,1)
         self.preset=QComboBox();self.preset.addItems(["Произвольный период","Этот месяц","Этот год","Прошлый год"]);self.preset.activated.connect(self._period_preset);selection.addWidget(self.preset)
-        units=QPushButton("Единицы ФАКТ");units.clicked.connect(self._fact_units);selection.addWidget(units);root.addLayout(selection)
+        units=QPushButton("Единицы ФАКТ");units.setEnabled(self.user.can(Permission.CATALOG_EDIT));units.clicked.connect(self._fact_units);selection.addWidget(units);root.addLayout(selection)
         self.status=QLabel("Загрузка…");self.status.setWordWrap(True);root.addWidget(self.status)
         scroll=QScrollArea();scroll.setWidgetResizable(True);scroll.setFrameShape(QFrame.NoFrame);root.addWidget(scroll,1)
         content=QWidget();scroll.setWidget(content);body=QVBoxLayout(content);body.setSpacing(14)
@@ -424,7 +424,7 @@ class AnalyticsWidget(QWidget):
             report=self._deferred_filtered;self._deferred_filtered=None;self._render_report(report)
 
     def _render_report(self,report):
-        self.report=report;self.export.setEnabled(True)
+        self.report=report;self.export.setEnabled(self.user.can(Permission.ANALYTICS_EXPORT))
         status=f"За сегодня: {report.totals.get('today_orders',0)} нарядов · {report.totals.get('today_employees',0)} уникальных сотрудников на сменах. За выбранный период: {len(report.orders)} нарядов · {len(report.details)} строк"
         if report.missing_workshops:status+=" · Базы ещё не созданы: "+", ".join(report.missing_workshops)
         self.status.setText(status)
@@ -494,7 +494,7 @@ class AnalyticsWidget(QWidget):
         threading.Thread(target=worker,name="SmartOrderExcelAnalytics",daemon=True).start()
 
     def _exported(self,path,error):
-        self._exporting=False;self.export.setEnabled(self.report is not None);self.status.setText("Ошибка экспорта: "+error if error else "Отчёт сохранён: "+path)
+        self._exporting=False;self.export.setEnabled(self.report is not None and self.user.can(Permission.ANALYTICS_EXPORT));self.status.setText("Ошибка экспорта: "+error if error else "Отчёт сохранён: "+path)
 
 
 class EmployeeAnalyticsDialog(QDialog):

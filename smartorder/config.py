@@ -10,7 +10,7 @@ from copy import deepcopy
 from datetime import datetime
 
 APP_NAME = "SmartOrder"
-APP_VERSION = "1.0"
+APP_VERSION = "1.0.7"
 _ACTIVE_WORKSHOP = "packaging"
 WORKSHOP_DB_FILES = {
     "packaging":"work_orders_ypak.db", "smoking":"work_orders_koptil.db",

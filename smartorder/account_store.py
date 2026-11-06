@@ -60,19 +60,28 @@ def activate_due(db, now=None):
             conn.execute("UPDATE account_options SET activate_at=NULL WHERE activate_at IS NOT NULL AND activate_at<=?", (cutoff,))
 
 
-def validate_actor(db, actor, permission=None):
+def validate_actor(db, actor, permission=None, conn=None):
     from .db import DatabaseError
     ensure_accounts(db)
-    if actor.id == 0 and not db.is_access_control_enabled():
-        return actor.permissions
-    with db.read_conn() as conn:
-        row = conn.execute("SELECT username,role,is_active FROM users WHERE id=?", (actor.id,)).fetchone()
-        if not row or not row[2] or row[0] != actor.username or split_roles(row[1]) != actor.roles:
+    if conn is None:
+        with db.read_conn() as reader:return validate_actor(db,actor,permission,reader)
+    if actor.id==0 and not conn.execute("SELECT access_control_enabled FROM settings WHERE id=1").fetchone()[0]:
+        current=actor.permissions
+    else:
+        row=conn.execute("SELECT username,role,is_active FROM users WHERE id=?",(actor.id,)).fetchone()
+        if not row or not row[2] or row[0]!=actor.username or split_roles(row[1])!=actor.roles:
             raise DatabaseError("Учётная запись изменена или отключена. Войдите заново.")
-        current = effective_permissions(db, actor.id, row[1], conn)
-    if permission and permission not in current:
-        raise DatabaseError("Недостаточно прав для этой операции")
+        current=effective_permissions(db,actor.id,row[1],conn)
+    if permission and permission not in current:raise DatabaseError("Недостаточно прав для этой операции")
     return current
+
+
+def require_manage_target(db,conn,current,user_id):
+    from .db import DatabaseError
+    if Permission.PERMISSIONS_MANAGE in current:return
+    target=conn.execute("SELECT role FROM users WHERE id=?",(user_id,)).fetchone()
+    if target and not set(effective_permissions(db,user_id,target[0],conn))<=set(current):
+        raise DatabaseError("Нет прав на изменение более привилегированной учётной записи")
 
 
 def activation_value(value):
@@ -115,3 +124,14 @@ def save_personalization(db, actor, enabled, payload):
         raise ValueError("Конфигурация слишком велика: максимум 8 МБ")
     with db.write_conn() as conn:
         conn.execute("INSERT INTO user_personalization(user_id,enabled,payload,updated_at) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET enabled=excluded.enabled,payload=excluded.payload,updated_at=excluded.updated_at,revision=revision+1", (actor.id, int(bool(enabled)), text, datetime.now().isoformat(timespec="seconds")))
+
+
+def account_snapshot(db,user_id):
+    ensure_accounts(db)
+    with db.read_conn() as conn:
+        row=conn.execute("SELECT u.username,u.role,u.is_active,o.permissions_json,o.activate_at FROM users u LEFT JOIN account_options o ON o.user_id=u.id WHERE u.id=?",(user_id,)).fetchone()
+    if row and not row[2] and row[4] and row[4]<=datetime.now().isoformat(timespec="seconds"):
+        activate_due(db);return account_snapshot(db,user_id)
+    if not row or not row[2]:return None
+    permissions=frozenset(normalized_permissions(json.loads(row[3]))) if row[3] is not None else db.role_permissions(row[1])
+    return SessionUser(int(user_id),row[0],";".join(split_roles(row[1])),permissions)

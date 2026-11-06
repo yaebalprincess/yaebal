@@ -24,7 +24,7 @@ def colors(dark=False):
     }
 
 
-def liquid_qss(zoom=100, appearance=None, selected_theme=None):
+def liquid_qss(zoom=100, appearance=None):
     from .config import resource_path
     checkmark=resource_path("smartorder/glass/assets/checkmark.svg").as_posix()
     scale = max(.5, min(2, int(zoom) / 100))
@@ -54,6 +54,8 @@ QTabBar::tab {{ min-height:{height}px; padding:6px 18px; border-top-left-radius:
 QTableView, QTableWidget, QListView, QTreeView {{ border-radius:12px; outline:0; }}
 QTabBar::tab:disabled {{ color:#8b9caf; }}
 QAbstractButton:disabled {{ color:#8b9caf; }}
+QMenu::item:disabled,QLabel:disabled {{ color:#8b9caf; }}
+QGroupBox:disabled::title {{ color:#8b9caf; }}
 QTableView::item, QTableWidget::item {{ padding:5px 8px; border:0; }}
 QListView::item, QTreeView::item {{ padding:7px 9px; border-radius:6px; }}
 QHeaderView::section {{ padding:8px; border:0; border-right:1px solid rgba(102,148,196,60); }}
@@ -100,6 +102,7 @@ QLabel#DbStateBad {{ color:#e44f67; font-weight:700; }}
         qss += f'QPushButton[theme="{theme}"]:disabled{{color:{c["disabled"]};border-color:{c["line"]};}}\n'
         qss += f'QPushButton#PrimaryButton[theme="{theme}"]{{color:white;border:1px solid #168aff;background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #279bff,stop:.53 #0785ff,stop:1 #0071f1);}}\n'
         qss += f'QPushButton#PrimaryButton[theme="{theme}"]:hover{{background:#178dff;}}\n'
+        qss += f'QPushButton#PrimaryButton[theme="{theme}"]:disabled,QPushButton#DangerButton[theme="{theme}"]:disabled,QPushButton#UserDeleteButton[theme="{theme}"]:disabled{{color:{c["disabled"]};background:{c["field"]};border-color:{c["line"]};}}\n'
         qss += f'QPushButton#DangerButton[theme="{theme}"],QPushButton#UserDeleteButton[theme="{theme}"]{{color:{"#ff93ad" if theme == "dark" else "#ed355b"};border-color:rgba(240,120,160,135);background:rgba(235,118,160,35);}}\n'
         qss += f'QPushButton#GhostButton[theme="{theme}"]{{border-color:transparent;background:transparent;}}\n'
         qss += rule("QLineEdit,QComboBox,QDateEdit,QDateTimeEdit,QSpinBox,QDoubleSpinBox,QTextEdit,QPlainTextEdit,QTextBrowser", f'color:{c["ink"]};background:{c["field"]};border:1px solid {c["line"]};selection-background-color:#168aff;selection-color:white;')
@@ -110,6 +113,7 @@ QLabel#DbStateBad {{ color:#e44f67; font-weight:700; }}
         qss += f'QTabBar[theme="{theme}"]::tab{{color:{c["muted"]};border:1px solid {c["line"]};border-bottom:0;background:{c["glass"]};}}\n'
         qss += f'QTabBar[theme="{theme}"]::tab:selected{{color:{c["blue"]};background:{c["field"]};}}\n'
         qss += f'QTabBar[theme="{theme}"]::tab:hover{{background:{c["hover"]};}}\n'
+        qss += f'QTabBar[theme="{theme}"]::tab:disabled,QToolButton[theme="{theme}"]:disabled,QMenu[theme="{theme}"]::item:disabled{{color:{c["disabled"]};}}\n'
         qss += rule("QTableView,QTableWidget,QListView,QTreeView", f'color:{c["ink"]};background:{c["table"]};alternate-background-color:{c["field"]};border:1px solid {c["edge"]};gridline-color:{c["line"]};selection-background-color:{c["selected"]};selection-color:{c["ink"]};')
         qss += f'QAbstractItemView[theme="{theme}"]::item:selected{{background:{c["selected"]};color:{c["ink"]};}}\n'
         qss += f'QAbstractItemView[theme="{theme}"]::item:hover{{background:{c["hover"]};}}\n'
@@ -139,11 +143,4 @@ QWidget[glassOverlay="true"] QTextBrowser{background:rgba(246,252,255,80);}
 QWidget[glassOverlay="true"][theme="dark"] QTextBrowser{background:rgba(20,39,62,85);}
 '''
     qss += typography_qss(appearance, zoom)
-    if selected_theme in ("light","dark"):
-        import re
-        other="dark" if selected_theme=="light" else "light"
-        def choose(match):
-            selectors=[part.strip().replace('[theme="'+selected_theme+'"]',"") for part in match[1].split(',') if '[theme="'+other+'"]' not in part]
-            return ','.join(selectors)+'{'+match[2]+'}' if selectors else ''
-        qss=re.sub(r'([^{}]+)\{([^{}]*)\}',choose,qss)
     return qss

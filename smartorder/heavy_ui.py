@@ -1824,7 +1824,7 @@ class RC3MainWindow(HeavyMainWindow):
         elif is_draft:self.info_users_list.addItem("Локальный черновик текущего пользователя")
 
     def _open_selected(self):
-        if not self.can(Permission.ORDERS_HISTORY):return
+        if not self.can(Permission.ORDERS_VIEW):return
         return super()._open_selected()
 
     def delete_selected_draft(self):
@@ -1844,7 +1844,7 @@ class RC3MainWindow(HeavyMainWindow):
             a_open=menu.addAction("Открыть");a_edit=menu.addAction("Редактировать");a_edit.setEnabled(self.can(Permission.ORDERS_EDIT));a_history=menu.addAction("Посмотреть подробную историю")
         else:a_open=a_edit=a_history=None
         a_export=menu.addAction("Выгрузить в Excel");a_export.setEnabled(isinstance(ref,int) and self.can(Permission.ORDERS_EXPORT));a_delete=None
-        if self.can(Permission.ORDERS_HISTORY):a_delete=menu.addAction("Удалить черновик");a_delete.setEnabled(isinstance(ref,str))
+        if self.can(Permission.ORDERS_DELETE_DRAFT):a_delete=menu.addAction("Удалить черновик");a_delete.setEnabled(isinstance(ref,str))
         act=menu.exec_(self.orders_table.viewport().mapToGlobal(pos))
         if act==a_open:self._open_selected()
         elif act==a_edit:self.edit_order()
@@ -1979,7 +1979,7 @@ class RC3MainWindow(HeavyMainWindow):
 
     def apply_patch_update(self):
         """Stage an application-only patch without touching any database."""
-        if not self.user.has_role("Администратор"):
+        if not self.can(Permission.APP_UPDATE):
             return
         path,_=QFileDialog.getOpenFileName(self,"Выберите ZIP-патч SmartOrder","","Патч SmartOrder (*.zip)")
         if not path:return
@@ -3705,7 +3705,7 @@ class RC12MainWindow(RC4MainWindow):
                 self.refresh_people(); self._refresh_reference_filters()
             elif idx == 3 and idx in self._loaded_tabs:
                 self.refresh_audit()
-                if self.user.has_role("Администратор"): self.refresh_users()
+                if self.can(Permission.USERS_VIEW) or self.can(Permission.USERS_MANAGE): self.refresh_users()
             self._rc12_dirty_tabs.discard(idx)
         except Exception:
             pass
@@ -4989,7 +4989,7 @@ class RC16MainWindow(RC15MainWindow):
             self.audit_table.setRowHeight(i,42)
 
     def restore_backup(self):
-        if not self.user.has_role("Администратор"):
+        if not self.can(Permission.BACKUP_RESTORE):
             warn(self,"Восстановление","Восстановление общей базы доступно только администратору.");return
         return super().restore_backup()
 
@@ -5066,7 +5066,7 @@ class RC16MainWindow(RC15MainWindow):
         root=QVBoxLayout(tab);root.setContentsMargins(30,20,30,24);root.setSpacing(10)
         logo=QLabel()
         if _set_logo(logo,132,"smartorder_logo_icon_light.png","smartorder_logo_icon.png","smartorder_logo_white.png","smartorder_logo.png"):root.addWidget(logo,alignment=Qt.AlignCenter)
-        edition=self._about_selectable(QLabel("Enterprise Edition · Версия 1.0"));edition.setAlignment(Qt.AlignCenter);edition.setSizePolicy(QSizePolicy.Maximum,QSizePolicy.Preferred);edition.setStyleSheet("font-size:15px;color:#F5F5F7;background-color:rgba(0,0,0,132);padding:3px 7px;border-radius:5px;");root.addWidget(edition,alignment=Qt.AlignCenter)
+        edition=self._about_selectable(QLabel(f"Enterprise Edition · Версия {APP_VERSION}"));edition.setAlignment(Qt.AlignCenter);edition.setSizePolicy(QSizePolicy.Maximum,QSizePolicy.Preferred);edition.setStyleSheet("font-size:15px;color:#F5F5F7;background-color:rgba(0,0,0,132);padding:3px 7px;border-radius:5px;");root.addWidget(edition,alignment=Qt.AlignCenter)
         transparent="QFrame#AboutTransparentCard{background:rgba(0,0,0,0);border:none;}"
         docs=QHBoxLayout();docs.setSpacing(18)
         policy_path=ensure_usage_policy_document();guide_path=ensure_user_guide_document();trouble_path=ensure_troubleshooting_document()
@@ -5859,8 +5859,8 @@ class RC18MainWindow(RC17MainWindow):
         if not bool(getattr(self, "_show_recent_deleted_people", False)):
             return
         menu = QMenu(self)
-        restore = menu.addAction("Восстановить (только для Администратора)")
-        restore.setEnabled(self.user.has_role("Администратор"))
+        restore = menu.addAction("Восстановить")
+        restore.setEnabled(self.can(Permission.EMPLOYEES_RESTORE))
         act = menu.exec_(self.people_table.viewport().mapToGlobal(pos))
         if act != restore or not restore.isEnabled():
             return
@@ -5967,11 +5967,11 @@ class RC18MainWindow(RC17MainWindow):
         copy_action=menu.addAction("Копировать")
         edit_action=delete_action=restore_action=None
         if recent:
-            restore_action=menu.addAction("Восстановить (только для Администратора)")
-            restore_action.setEnabled(self.user.has_role("Администратор"))
+            restore_action=menu.addAction("Восстановить")
+            restore_action.setEnabled(self.can(Permission.CATALOG_RESTORE))
         else:
-            edit_action=menu.addAction("Редактировать")
-            delete_action=menu.addAction("Удалить")
+            edit_action=menu.addAction("Редактировать");edit_action.setEnabled(self.can(Permission.CATALOG_EDIT))
+            delete_action=menu.addAction("Удалить");delete_action.setEnabled(self.can(Permission.CATALOG_DELETE))
         act=menu.exec_(self.work_table.viewport().mapToGlobal(pos))
         if act==copy_action:
             QApplication.clipboard().setText(str(item.text()))
@@ -6126,7 +6126,7 @@ class RC18MainWindow(RC17MainWindow):
         logo=QLabel()
         if _set_logo(logo,112,"smartorder_logo_icon_light.png","smartorder_logo_icon.png","smartorder_logo_white.png","smartorder_logo.png"):
             root.addWidget(logo,alignment=Qt.AlignCenter)
-        edition=self._about_selectable(QLabel("Enterprise Edition · Версия 1.0"))
+        edition=self._about_selectable(QLabel(f"Enterprise Edition · Версия {APP_VERSION}"))
         edition.setAlignment(Qt.AlignCenter);edition.setSizePolicy(QSizePolicy.Maximum,QSizePolicy.Preferred)
         edition.setStyleSheet("color:#F5F5F7;background-color:rgba(0,0,0,132);padding:3px 7px;border-radius:5px;")
         root.addWidget(edition,alignment=Qt.AlignCenter)

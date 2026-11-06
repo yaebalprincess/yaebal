@@ -72,12 +72,14 @@ def apply_apple_design(root=None, theme: str = "light", zoom: int = 100) -> None
         # Setting an identical application stylesheet still re-polishes every
         # widget, including hidden combo containers. Change it only for new fonts.
         appearance = appearance_of(root)
-        key = (theme,json.dumps(appearance, sort_keys=True))
+        font_key=json.dumps(appearance["fonts"],sort_keys=True)
+        key = font_key
         changed = getattr(app, "_smartorder_stylesheet_key", None) != key
         app._liquid_appearance = appearance
         if getattr(app, "_smartorder_stylesheet_key", None) != key:
-            app.setStyleSheet(liquid_qss(100, appearance, theme))
-            app.setFont(font_for("body", 100, appearance))
+            app.setStyleSheet(liquid_qss(100, appearance))
+            if getattr(app,"_smartorder_font_key",None)!=font_key:
+                app.setFont(font_for("body",100,appearance));app._smartorder_font_key=font_key
             app._smartorder_stylesheet_key = key
             app._smartorder_stylesheet_zoom = 100
         if getattr(app,"_liquid_theme",None)!=theme:
@@ -92,10 +94,8 @@ def apply_apple_design(root=None, theme: str = "light", zoom: int = 100) -> None
         try: root.setObjectName("SmartOrderWindow")
         except Exception: pass
         if app is not None:
-            if root.property("liquidGlass") and root.isWindow():
-                controller.refresh_theme(root,theme)
-            elif changed or root.property("theme") != theme or not root.property("liquidGlass"):
-                controller.apply(root, theme)
+            if changed or root.property("theme") != theme or not root.property("liquidGlass"):
+                controller.apply(root,theme)
             from PyQt5.QtWidgets import QMainWindow
             if not isinstance(root, QMainWindow):
                 from .workspace_ui import apply_page_scale

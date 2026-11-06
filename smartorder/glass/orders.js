@@ -181,8 +181,12 @@
       replaceContent($("history"), fragment);
     }
     $("access-overlay").hidden = !state.topRestricted;
+    $("history-access").hidden=state.canHistory||state.topRestricted;
+    document.querySelector(".history-panel").classList.toggle("restricted",!state.canHistory);
     $("table-panel").setAttribute("aria-busy", state.busy ? "true" : "false");
     window.GlassPopovers.update(state, send);
+    document.documentElement.dataset.ready="true";
+    send("painted");
   }
   function updateZoom(value) {
     $("zoom-value").textContent = value + "%";

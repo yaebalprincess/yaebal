@@ -88,16 +88,19 @@ class Permission:
     DATA_SYNC = "data.sync"
     DIAGNOSTICS_VIEW = "diagnostics.view"
     APP_UPDATE = "app.update"
+    ACCESS_CONTROL = "access.control"
     CATALOG_VIEW = "catalog.view"
     CATALOG_CREATE = "catalog.create"
     CATALOG_EDIT = "catalog.edit"
     CATALOG_DELETE = "catalog.delete"
     CATALOG_IMPORT = "catalog.import"
+    CATALOG_RESTORE = "catalog.restore"
     EMPLOYEES_VIEW = "employees.view"
     EMPLOYEES_CREATE = "employees.create"
     EMPLOYEES_EDIT = "employees.edit"
     EMPLOYEES_DELETE = "employees.delete"
     EMPLOYEES_IMPORT = "employees.import"
+    EMPLOYEES_RESTORE = "employees.restore"
     ADMIN_VIEW = "admin.view"
     USERS_MANAGE = "users.manage"
     PERMISSIONS_MANAGE = "permissions.manage"
@@ -124,6 +127,7 @@ PERMISSION_LABELS = {
     Permission.DATA_SYNC: "Данные: синхронизация",
     Permission.DIAGNOSTICS_VIEW: "Диагностика: просмотр",
     Permission.APP_UPDATE: "Программа: обновление",
+    Permission.ACCESS_CONTROL: "Разрешительный режим: редактирование",
     Permission.ORDERS_VIEW: "Наряды: просмотр",
     Permission.ORDERS_CREATE: "Наряды: создание",
     Permission.ORDERS_EDIT: "Наряды: редактирование",
@@ -133,11 +137,13 @@ PERMISSION_LABELS = {
     Permission.CATALOG_EDIT: "Номенклатура: редактирование",
     Permission.CATALOG_DELETE: "Номенклатура: удаление",
     Permission.CATALOG_IMPORT: "Номенклатура: импорт",
+    Permission.CATALOG_RESTORE: "Номенклатура: восстановление",
     Permission.EMPLOYEES_VIEW: "Сотрудники: просмотр",
     Permission.EMPLOYEES_CREATE: "Сотрудники: создание",
     Permission.EMPLOYEES_EDIT: "Сотрудники: редактирование",
     Permission.EMPLOYEES_DELETE: "Сотрудники: удаление",
     Permission.EMPLOYEES_IMPORT: "Сотрудники: импорт",
+    Permission.EMPLOYEES_RESTORE: "Сотрудники: восстановление",
     Permission.ADMIN_VIEW: "Администрирование: вкладка",
     Permission.USERS_MANAGE: "Пользователи: управление",
     Permission.PERMISSIONS_MANAGE: "Роли: права",

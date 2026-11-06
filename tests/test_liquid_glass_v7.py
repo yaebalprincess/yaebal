@@ -33,7 +33,7 @@ def economist(app,system):
         app.sendPostedEvents(None,QEvent.DeferredDelete);app.processEvents()
 
 
-def test_theme_clickable_at_both_edges_and_one_stylesheet_pass(glass,app,monkeypatch):
+def test_theme_clickable_at_both_edges_without_stylesheet_replacement(glass,app,monkeypatch):
     window,_,_=glass
     for index in (1,2,3,4,5,6,0):window.tabs.setCurrentIndex(index);app.processEvents()
     calls=[];original=app.setStyleSheet
@@ -45,8 +45,8 @@ def test_theme_clickable_at_both_edges_and_one_stylesheet_pass(glass,app,monkeyp
         drain(app,lambda:not window._theme_apply_timer.isActive())
         times.append(time.perf_counter()-started)
         assert app._liquid_theme==expected
-    assert len(calls)==2
-    assert not any('[theme="'+theme+'"]' in calls[-1] for theme in ("light","dark"))
+    assert not calls
+    assert all('[theme="'+theme+'"]' in app.styleSheet() for theme in ("light","dark"))
     print("Theme with all tabs loaded, seconds:",times)
 
 
@@ -56,7 +56,7 @@ def test_tab_labels_fit_after_fractional_zoom_and_language_change(glass,app):
         window.set_language(code);window.zoom.setValue(111);window._rc18_commit_zoom();app.processEvents()
         bar=window.tabs.tabBar()
         for index in range(bar.count()):
-            assert bar.tabRect(index).width()>=bar.fontMetrics().horizontalAdvance(bar.tabText(index))+28
+            assert bar.tabRect(index).width()>=bar.fontMetrics().horizontalAdvance(bar.tabText(index))+2*int(bar.property("tabHorizontalPadding"))+8
 
 
 def test_economist_restricted_region_notifications_and_workshop_anchor(economist,app):
@@ -75,6 +75,14 @@ def test_economist_restricted_region_notifications_and_workshop_anchor(economist
     expected=window.titlebar.badge.mapToGlobal(QPoint(0,window.titlebar.badge.height()))
     assert 0<=popup.y()-expected.y()<=6
     assert all(action.isEnabled() for action in popup.actions());popup.close()
+
+
+def test_first_channel_frame_receives_permissions_without_manual_push(economist,app):
+    window,_,_=economist
+    drain(app,lambda:javascript(app,window,'document.getElementById("access-overlay").hidden') is False)
+    drain(app,lambda:window._glass_painted)
+    assert javascript(app,window,'document.getElementById("create").disabled') is True
+    assert javascript(app,window,'document.getElementById("empty-message").textContent')=="Наряды пока не созданы."
 
 
 def test_pointer_and_popup_styles_use_app_palette(glass,app):
@@ -184,3 +192,35 @@ def test_loading_a_shared_file_keeps_recipient_sync_choice(glass,app,monkeypatch
     assert loaded.language=="de" and window.tabs.tabText(5)=="Personalisierung"
     assert window.zoom.value()==111 and not window.ui_settings.sync_personalization
     assert not window.appearance_panel.sync_config.isChecked()
+
+
+def test_custom_tab_access_and_disabled_actions_use_grants(economist,app):
+    window,manager,user=economist
+    admin=manager.auth.authenticate("admin","password123")
+    grants=[Permission.CATALOG_VIEW,Permission.CATALOG_CREATE,Permission.EMPLOYEES_VIEW,
+        Permission.ADMIN_VIEW,Permission.USERS_VIEW,Permission.ANALYTICS_VIEW]
+    manager.auth.update_user(admin,user.id,user.username,user.role,permissions=grants)
+    window._read_account_access();drain(app,lambda:window.user.permissions==set(grants))
+    assert window.tabs.isTabEnabled(1) and window.tabs.isTabEnabled(2) and window.tabs.isTabEnabled(3)
+    assert not window.tabs.isTabEnabled(0)
+    window.tabs.setCurrentIndex(1);app.processEvents()
+    add=next(b for b in window.tabs.currentWidget().findChildren(QPushButton) if b.property("alignedAction")=="add")
+    imp=next(b for b in window.tabs.currentWidget().findChildren(QPushButton) if b.property("alignedAction")=="import")
+    assert add.isEnabled() and not imp.isEnabled()
+    window.tabs.setCurrentIndex(3);app.processEvents();drain(app,lambda:window.users_table.rowCount()>0)
+    add_user=next(b for b in window.tabs.currentWidget().findChildren(QPushButton) if b.text()=="Добавить пользователя")
+    assert not add_user.isEnabled() and not window.access_control_check.isEnabled()
+    for row in range(window.users_table.rowCount()):
+        assert all(not b.isEnabled() for b in window.users_table.cellWidget(row,3).findChildren(QPushButton))
+    window.tabs.setCurrentIndex(4);drain(app,lambda:window.analytics.report is not None)
+    assert not window.analytics.export.isEnabled()
+
+
+def test_revoked_view_clears_display_and_selects_personalization(economist,app):
+    window,manager,user=economist;admin=manager.auth.authenticate("admin","password123")
+    manager.auth.update_user(admin,user.id,user.username,user.role,permissions=[])
+    window._read_account_access();drain(app,lambda:not window.user.permissions)
+    assert window.tabs.currentIndex()==5 and window.appearance_panel.isVisible()
+    assert not window.titlebar.bell.isVisible()
+    assert all(not window.tabs.isTabEnabled(i) for i in range(5))
+    assert not window.glass_state()["rows"]

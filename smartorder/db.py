@@ -627,8 +627,8 @@ class Database:
             return True if row is None else bool(int(row[0] or 0))
 
     def set_access_control(self, actor: SessionUser, enabled: bool) -> None:
-        if not actor.has_role("Администратор"):
-            raise DatabaseError("Изменение разрешительного режима доступно только администратору.")
+        from .account_store import validate_actor
+        validate_actor(self,actor,Permission.ACCESS_CONTROL)
         value = 1 if enabled else 0
         with self.write_conn() as conn:
             conn.execute("INSERT OR IGNORE INTO settings(id,access_control_enabled) VALUES(1,?)", (value,))
@@ -716,13 +716,16 @@ class Database:
                     conn.execute("UPDATE users SET password_hash=? WHERE id=?", (hash_password(password), int(row[0])))
             except Exception:
                 pass
-        return SessionUser(int(row[0]), str(row[1]), ";".join(split_roles(row[3])), self.permissions_for_user(int(row[0]), str(row[3])))
+        role=";".join(split_roles(row[3]))
+        if role!=str(row[3]):
+            with self.write_conn() as conn:conn.execute("UPDATE users SET role=? WHERE id=?",(role,int(row[0])))
+        return SessionUser(int(row[0]),str(row[1]),role,self.permissions_for_user(int(row[0]),role))
 
     def list_users(self) -> list[sqlite3.Row]:
         from .account_store import activate_due
         activate_due(self)
         with self.read_conn() as conn:
-            return conn.execute("SELECT u.id,u.username,u.role,COALESCE(u.is_active,1) AS is_active,o.activate_at FROM users u LEFT JOIN account_options o ON o.user_id=u.id ORDER BY u.username COLLATE NOCASE").fetchall()
+            return conn.execute("SELECT u.id,u.username,u.role,COALESCE(u.is_active,1) AS is_active,o.activate_at,o.permissions_json FROM users u LEFT JOIN account_options o ON o.user_id=u.id ORDER BY u.username COLLATE NOCASE").fetchall()
 
     def add_user(self, actor: SessionUser, username: str, password: str, role: str, *, permissions=None, activate_at=None) -> None:
         from .account_store import validate_actor, normalized_permissions, activation_value
@@ -740,12 +743,14 @@ class Database:
             raise DatabaseError("Нет прав на назначение этих разрешений")
         encoded=hash_password(password)
         with self.write_conn() as conn:
+            current=validate_actor(self,actor,Permission.USERS_MANAGE,conn)
+            if Permission.PERMISSIONS_MANAGE not in current and (chosen is not None or not set(requested)<=set(current)):raise DatabaseError("Нет прав на назначение этих разрешений")
             cur=conn.execute("INSERT INTO users(username,password_hash,role,is_active) VALUES(?,?,?,?)",(username,encoded,role,0 if activation else 1))
             conn.execute("INSERT INTO account_options(user_id,permissions_json,activate_at) VALUES(?,?,?)",(cur.lastrowid,json.dumps(chosen) if chosen is not None else None,activation))
             self._audit_conn(conn,actor.username,"Добавил","Пользователь",username,f"Роль: {role}; активация: {activation or 'сразу'}; индивидуальные права: {chosen is not None}")
 
     def update_user(self, actor: SessionUser, user_id: int, username: str, role: str, password: str = "", *, permissions=UNSET, activate_at=UNSET) -> None:
-        from .account_store import validate_actor, normalized_permissions, activation_value, guard_last_admin
+        from .account_store import validate_actor, normalized_permissions, activation_value, guard_last_admin,require_manage_target
         current=validate_actor(self,actor,Permission.USERS_MANAGE)
         username=str(username or "").strip();password=str(password or "");names=split_roles(role);role=";".join(names)
         if not username or len(username)>128 or any(ord(ch)<32 for ch in username):raise ValueError("Логин обязателен и должен быть не длиннее 128 символов")
@@ -756,6 +761,7 @@ class Database:
         activation=UNSET if activate_at is UNSET else activation_value(activate_at)
         encoded=hash_password(password) if password else None
         with self.write_conn() as conn:
+            current=validate_actor(self,actor,Permission.USERS_MANAGE,conn);require_manage_target(self,conn,current,user_id)
             old=conn.execute("SELECT role,is_active FROM users WHERE id=?",(user_id,)).fetchone()
             if old is None:raise DatabaseError("Пользователь не найден")
             prior=conn.execute("SELECT permissions_json,activate_at FROM account_options WHERE user_id=?",(user_id,)).fetchone()
@@ -763,7 +769,7 @@ class Database:
                 raise DatabaseError("Нет прав на изменение разрешений пользователя")
             if chosen is UNSET:chosen=json.loads(prior[0]) if prior and prior[0] is not None else None
             if activation is UNSET:activation=prior[1] if prior else None
-            active=0 if activation else int(old[1])
+            active=0 if activation else (1 if activate_at is not UNSET and prior and prior[1] else int(old[1]))
             guard_last_admin(self,conn,user_id,role,active,chosen)
             conn.execute("UPDATE users SET username=?,role=?,is_active=? WHERE id=?",(username,role,active,user_id))
             if encoded:conn.execute("UPDATE users SET password_hash=? WHERE id=?",(encoded,user_id))
@@ -771,9 +777,10 @@ class Database:
             self._audit_conn(conn,actor.username,"Изменил","Пользователь",username,f"Роль: {role}; активация: {activation or 'не задана'}; индивидуальные права: {chosen is not None}")
 
     def set_user_active(self, actor: SessionUser, user_id: int, active: bool) -> None:
-        from .account_store import validate_actor, guard_last_admin
+        from .account_store import validate_actor, guard_last_admin,require_manage_target
         validate_actor(self,actor,Permission.USERS_MANAGE)
         with self.write_conn() as conn:
+            current=validate_actor(self,actor,Permission.USERS_MANAGE,conn);require_manage_target(self,conn,current,user_id)
             row=conn.execute("SELECT username,role FROM users WHERE id=?",(user_id,)).fetchone()
             if not row:return
             option=conn.execute("SELECT permissions_json FROM account_options WHERE user_id=?",(user_id,)).fetchone()
@@ -785,12 +792,13 @@ class Database:
 
     def delete_user(self, actor: SessionUser, user_id: int) -> None:
         """Delete a user while protecting the current and last admin accounts."""
-        from .account_store import validate_actor
+        from .account_store import validate_actor,require_manage_target
         validate_actor(self,actor,Permission.USERS_MANAGE)
         user_id = int(user_id)
         if int(actor.id) == user_id:
             raise DatabaseError("Нельзя удалить текущего пользователя")
         with self.write_conn() as conn:
+            current=validate_actor(self,actor,Permission.USERS_MANAGE,conn);require_manage_target(self,conn,current,user_id)
             row = conn.execute("SELECT username,role,COALESCE(is_active,1) FROM users WHERE id=?", (user_id,)).fetchone()
             if not row:
                 return

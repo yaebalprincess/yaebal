@@ -29,7 +29,7 @@ from .workshops import WORKSHOPS, allowed_workshops
 
 log = logging.getLogger(__name__)
 ASSET_ROOT = resource_path("smartorder/glass")
-ACTIONS = frozenset({"ready", "select", "filter", "date", "date_range", "create", "edit",
+ACTIONS = frozenset({"ready", "painted", "select", "filter", "date", "date_range", "create", "edit",
                      "export", "delete", "open", "view", "history", "tab",
                      "columns", "theme", "zoom", "refresh", "workshop", "notifications",
                      "minimize", "maximize", "close", "move", "resize", "fullscreen"})
@@ -135,6 +135,7 @@ class MainWindow(EnterpriseWindow):
     def __init__(self, db, user, manager=None, tracker=None):
         self._glass = None
         self._glass_ready = False
+        self._glass_painted = False
         self._glass_busy = False
         self._glass_last_state = ""
         self._web_rows = []
@@ -220,10 +221,12 @@ class MainWindow(EnterpriseWindow):
     def _ensure_tab_widths(self):
         if not hasattr(self,"tabs"):return
         from .appearance import font_for
+        from .appearance_config import normalize_appearance
         import json
         bar=self.tabs.tabBar();font=font_for("tabs",self.ui_settings.zoom,self.ui_settings.appearance)
-        scale=self.ui_settings.zoom/100
-        css=f'QTabBar{{font-family:{json.dumps(font.family())};font-size:{font.pixelSize()}px;font-weight:{round(font.weight()/10)*100};}}QTabBar::tab{{min-height:{max(30,font.pixelSize()+16)}px;padding:6px {round(22*scale)}px;}}'
+        spec=normalize_appearance(self.ui_settings.appearance)["fonts"]["tabs"]
+        scale=self.ui_settings.zoom/100;padding=round(22*scale);bar.setProperty("tabHorizontalPadding",padding)
+        css=f'QTabBar{{font-family:{json.dumps(font.family())};font-size:{font.pixelSize()}px;font-weight:{spec["weight"]};font-style:{"italic" if spec["italic"] else "normal"};}}QTabBar::tab{{min-height:{max(30,font.pixelSize()+16)}px;padding:6px {padding}px;}}'
         if bar.styleSheet()!=css:bar.setStyleSheet(css)
         bar.setExpanding(False);bar.setElideMode(Qt.ElideNone);bar.setUsesScrollButtons(True);bar.updateGeometry()
 
@@ -306,6 +309,7 @@ class MainWindow(EnterpriseWindow):
             "workshopKey": self.workshop,
             "topRestricted": self._orders_top_restricted(),
             "canFilter":self.can(Permission.ORDERS_FILTER),
+            "canHistory":self.can(Permission.ORDERS_HISTORY),
             "workshops": [{"value": key, "label": tr(label), "enabled": key in accessible}
                           for key, label in WORKSHOPS.items()],
             "tabs": [{"label": self.tabs.tabText(i).replace(" ⍰", ""),
@@ -335,6 +339,12 @@ class MainWindow(EnterpriseWindow):
         if force or encoded != self._glass_last_state:
             self._glass_last_state = encoded
             self._glass.bridge.stateChanged.emit(encoded)
+
+    def _retry_initial_state(self):
+        if self._live_closed or self._glass_painted:
+            self._initial_state_timer.stop();return
+        self._initial_state_attempts+=1;self._publish_glass_state(force=True)
+        if self._initial_state_attempts>=8:self._initial_state_timer.stop()
 
     def _glass_loaded(self, ok):
         if not ok:
@@ -371,6 +381,13 @@ class MainWindow(EnterpriseWindow):
         if action == "ready":
             self._glass_ready = True
             self._publish_glass_state(force=True)
+            self._initial_state_attempts=0
+            self._initial_state_timer=QTimer(self);self._initial_state_timer.setInterval(120);self._initial_state_timer.timeout.connect(self._retry_initial_state);self._initial_state_timer.start()
+            return
+        if action=="painted":
+            self._glass_painted=True
+            if hasattr(self,"_initial_state_timer"):self._initial_state_timer.stop()
+            if self._glass is not None:self._glass.update()
             return
         if action not in ACTIONS or not isinstance(payload, dict):
             return

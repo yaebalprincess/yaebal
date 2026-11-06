@@ -66,7 +66,7 @@ def main():
             def capture():
                 nonlocal attempts
                 attempts += 1
-                if window._glass_ready and not window._orders_running:
+                if window._glass_ready and window._glass_painted and not window._orders_running:
                     timer.stop()
 
                     def save():

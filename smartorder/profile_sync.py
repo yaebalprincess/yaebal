@@ -52,6 +52,8 @@ def read_config(payload):
 
 
 def load_shared_settings(auth,user,local):
+    if user.id<=0:
+        local.sync_personalization=False;return local,""
     if pending_path(user).exists():return local,""
     try:
         saved=auth.get_personalization(user)

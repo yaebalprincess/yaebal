@@ -10,7 +10,7 @@ class FittingTabBar(QTabBar):
     def tabSizeHint(self,index):
         from PyQt5.QtCore import QSize
         metrics=self.fontMetrics()
-        return QSize(max(110,metrics.horizontalAdvance(self.tabText(index))+44),max(44,metrics.height()+22))
+        return QSize(max(110,metrics.horizontalAdvance(self.tabText(index))+2*int(self.property("tabHorizontalPadding") or 22)+12),max(44,metrics.height()+22))
     def mouseMoveEvent(self,event):
         index=self.tabAt(event.pos());self.setCursor(Qt.ForbiddenCursor if index>=0 and not self.isTabEnabled(index) else Qt.ArrowCursor)
         super().mouseMoveEvent(event)
@@ -27,8 +27,12 @@ class AccessCursor(QObject):
         if event.type()==QEvent.Show:
             widget.setMouseTracking(True)
             if not widget.isEnabled():widget.setCursor(Qt.ForbiddenCursor)
+        if event.type()==QEvent.EnabledChange and widget.isEnabled() and not widget.property("accessDenied") and widget.cursor().shape()==Qt.ForbiddenCursor:widget.unsetCursor()
         if event.type() in (QEvent.MouseMove,QEvent.HoverMove,QEvent.Enter,QEvent.Leave,QEvent.EnabledChange):
             under=self.app.widgetAt(QCursor.pos());denied=under is not None and (not under.isEnabled() or bool(under.property("accessDenied")))
+            from PyQt5.QtWidgets import QMenu,QAbstractItemView
+            if isinstance(under,QMenu):
+                action=under.actionAt(under.mapFromGlobal(QCursor.pos()));denied=action is not None and not action.isEnabled()
             if isinstance(under,QTabBar):
                 index=under.tabAt(under.mapFromGlobal(QCursor.pos()));denied=index>=0 and not under.isTabEnabled(index)
             if denied!=self.forbidden:

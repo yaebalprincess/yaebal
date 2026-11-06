@@ -73,6 +73,13 @@ class AccountDialog(QDialog):
 
     def _permission_toggled(self,code,checked):
         group=code.split(".")[0];view=group+".view"
+        admin_groups={"users","permissions","audit","backup","identity","data","diagnostics","app","access"}
+        if checked and code==Permission.PERMISSIONS_MANAGE:self.permission_checks[Permission.USERS_MANAGE].setChecked(True)
+        if not checked and code==Permission.USERS_MANAGE:self.permission_checks[Permission.PERMISSIONS_MANAGE].setChecked(False)
+        if checked and group in admin_groups:self.permission_checks[Permission.ADMIN_VIEW].setChecked(True)
+        if not checked and code==Permission.ADMIN_VIEW:
+            for other,check in self.permission_checks.items():
+                if other.split(".")[0] in admin_groups:check.setChecked(False)
         if checked and view in self.permission_checks and code!=view:self.permission_checks[view].setChecked(True)
         if not checked and code==view:
             for other,check in self.permission_checks.items():

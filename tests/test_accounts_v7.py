@@ -70,6 +70,9 @@ def test_last_admin_and_permission_assignment_are_protected(accounts):
         manager.auth.add_user(operator,"escalated","password123","Администратор")
     with pytest.raises(DatabaseError,match="прав"):
         manager.auth.update_user(operator,admin.id,admin.username,admin.role,permissions=[])
+    with pytest.raises(DatabaseError,match="прав"):
+        manager.auth.update_user(operator,admin.id,admin.username,admin.role,password="takeover123")
+    assert manager.auth.authenticate(admin.username,"password123") is not None
 
 
 def test_own_shared_profile_survives_new_database_client(accounts):
@@ -82,3 +85,25 @@ def test_own_shared_profile_survives_new_database_client(accounts):
     assert fresh.get_personalization(other) is None
     fresh.save_personalization(other,True,{"language":"kk"})
     assert manager.auth.get_personalization(admin)["payload"]=={"theme":"dark"}
+
+
+def test_workshop_role_keeps_its_scope_when_combined_with_economist(accounts):
+    from smartorder.workshops import allowed_workshops
+    manager,admin=accounts
+    manager.auth.add_user(admin,"combined","password123","Экономист;Мастер Коптильный Цех")
+    user=manager.auth.authenticate("combined","password123")
+    assert set(allowed_workshops(user))=={"smoking","drying"}
+    with pytest.raises(DatabaseError,match="цех"):
+        manager.database("adyghe",user)
+
+
+def test_access_control_has_its_own_grant(accounts):
+    manager,admin=accounts
+    manager.auth.add_user(admin,"operator","password123","Экономист",permissions=[Permission.USERS_MANAGE])
+    operator=manager.auth.authenticate("operator","password123")
+    with pytest.raises(DatabaseError,match="прав"):
+        manager.auth.set_access_control(operator,False)
+    manager.auth.update_user(admin,operator.id,operator.username,operator.role,permissions=[Permission.ACCESS_CONTROL])
+    operator=manager.auth.authenticate("operator","password123")
+    manager.auth.set_access_control(operator,False)
+    assert not manager.auth.is_access_control_enabled()

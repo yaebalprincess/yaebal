@@ -256,6 +256,10 @@ class LiquidController(QObject):
             if widget.styleSheet():
                 css = re.sub(r"font-(?:family|size|weight|style)\s*:[^;}]+;?", "", widget.styleSheet(), flags=re.I)
                 if css != widget.styleSheet(): widget.setStyleSheet(css)
+        if isinstance(widget,QLabel) and widget.styleSheet() and "QLabel:disabled" not in widget.styleSheet():
+            css=widget.styleSheet()
+            if "{" not in css:css="QLabel{"+css+"}"
+            widget.setStyleSheet(css+"QLabel:disabled{color:#8b9caf;}")
         widget.setProperty("theme", theme)
         widget.setProperty("liquidGlass", True)
         icon_name = widget.property("symbolIcon")
@@ -316,21 +320,6 @@ class LiquidController(QObject):
                 child.update()
         finally:
             self._styling = False
-
-    def refresh_theme(self,root,theme):
-        """The selected stylesheet repaints native controls in one Qt pass."""
-        root.setProperty("theme",theme);root._liquid_applied_theme=theme
-        from .symbols import symbol_icon
-        for widget in root.findChildren(QWidget):
-            if not widget.isVisible():continue
-            if hasattr(widget,"setTheme"):
-                widget.setTheme(theme)
-            if '[theme=' in widget.styleSheet():
-                widget.setProperty("theme",theme);widget.style().unpolish(widget);widget.style().polish(widget)
-            name=widget.property("symbolIcon")
-            if name and hasattr(widget,"setIcon"):widget.setIcon(symbol_icon(name,theme))
-        for child in root.findChildren(GlassBackdrop):child.update()
-        root.update()
 
     @staticmethod
     def is_overlay(widget):

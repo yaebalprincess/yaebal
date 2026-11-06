@@ -34,14 +34,14 @@ def allowed_workshops(user: SessionUser) -> tuple[str, ...]:
     # also carry an analytics-only role alongside one or more workshop roles;
     # in that case preserve the explicit workshop assignment instead of
     # silently collapsing it to packaging.
-    if any(role in ANALYTICS_ROLES for role in roles):
+    if any(role in (ANALYTICS_ROLES-ANALYTICS_ONLY_ROLES) for role in roles):
         return tuple(WORKSHOPS)
     result=[]
     for role in roles:
         for key in WORKSHOP_ROLES.get(role, ()):
             if key not in result: result.append(key)
     if not result and any(role in ANALYTICS_ONLY_ROLES for role in roles):
-        return ("packaging",)
+        return tuple(WORKSHOPS)
     return tuple(result)
 
 
@@ -189,10 +189,12 @@ _MUTATIONS = {
     "delete_work_type": Permission.CATALOG_DELETE, "import_work_types": Permission.CATALOG_IMPORT,
     "add_user": Permission.USERS_MANAGE, "update_user": Permission.USERS_MANAGE,
     "delete_user": Permission.USERS_MANAGE, "set_user_active": Permission.USERS_MANAGE,
-    "restore_soft_deleted": Permission.USERS_MANAGE, "restore_from": Permission.BACKUP_RESTORE,
-    "set_access_control": Permission.USERS_MANAGE, "set_role_permissions": Permission.PERMISSIONS_MANAGE,
+    "restore_soft_deleted": Permission.EMPLOYEES_RESTORE, "restore_from": Permission.BACKUP_RESTORE,
+    "set_access_control": Permission.ACCESS_CONTROL, "set_role_permissions": Permission.PERMISSIONS_MANAGE,
     "acquire_edit_lock": Permission.ORDERS_EDIT,
 }
+
+_READS={"list_orders":Permission.ORDERS_VIEW,"get_order":Permission.ORDERS_VIEW,"read_archive_orders":Permission.ORDERS_VIEW}
 
 
 class WorkshopDatabase:
@@ -208,10 +210,13 @@ class WorkshopDatabase:
     def __getattr__(self, name):
         target = self.manager.auth if name in _AUTH_METHODS else self.backend
         value = getattr(target, name)
-        if name not in _MUTATIONS:
+        if name not in _MUTATIONS and name not in _READS:
             return value
         def guarded(*args, **kwargs):
-            permission = _MUTATIONS[name]
+            permission = _MUTATIONS.get(name) or _READS[name]
+            if name=="restore_soft_deleted":
+                entity=kwargs.get("entity_type") or (args[1] if len(args)>1 else "")
+                permission=Permission.CATALOG_RESTORE if entity=="work_type" else Permission.EMPLOYEES_RESTORE
             if name == "save_order" and (kwargs.get("parent_id") is not None or len(args)>8 and args[8] is not None):
                 permission = Permission.ORDERS_EDIT
             self.manager.require(self.user, permission)

@@ -185,7 +185,7 @@ class AppearancePanel(QGroupBox):
             self.draft["fonts"][role]["family"] = family.currentFont().family()
         spec = self.draft["fonts"][role]
         spec.update(size=size.value(), weight=weight.currentData(), italic=italic.isChecked())
-        preview.setStyleSheet(f'font-family:{json.dumps(spec["family"])};font-size:{spec["size"]:g}px;'
+        preview.setStyleSheet(f'font-family:{json.dumps(spec["family"])};font-size:{max(6,round(spec["size"]))}px;'
                              f'font-weight:{spec["weight"]};font-style:{"italic" if spec["italic"] else "normal"};')
 
     def background_changed(self, *_):
