@@ -14,7 +14,7 @@ def apply_page_scale(widget, appearance, zoom=100):
     key=(int(zoom),json.dumps(appearance,sort_keys=True))
     if getattr(widget,"_page_scale_key",None)==key and widget.styleSheet()==getattr(widget,"_liquid_scoped_qss",None):return
     scale=max(.5,min(2.,zoom/100));height=max(28,round(30*min(scale,1.5)))
-    css=typography_qss(appearance,zoom)+f'QPushButton,QLineEdit,QComboBox,QDateEdit,QSpinBox,QDoubleSpinBox{{min-height:{height}px;}}QTabBar::tab{{min-height:{height}px;}}'
+    css=typography_qss(appearance,zoom)+f'QPushButton,QLineEdit,QComboBox,QDateEdit,QDateTimeEdit,QSpinBox,QDoubleSpinBox{{min-height:{height}px;}}QTabBar::tab{{min-height:{height}px;}}'
     base=getattr(widget,"_page_base_qss",None)
     if base is None:base=widget.styleSheet();widget._page_base_qss=base
     widget._liquid_scoped_qss=base+css
@@ -39,7 +39,10 @@ class EmptyTableMessage(QLabel):
         if search is not None:search.textChanged.connect(self.refresh)
         self.refresh()
     def refresh(self,*_):
-        self.setText(tr("По вашему запросу ничего не найдено." if self.search is not None and self.search.text().strip() else self.message))
+        import html
+        icon=resource_path("smartorder/glass/assets/empty-state.svg").as_uri()
+        message=tr("По вашему запросу ничего не найдено." if self.search is not None and self.search.text().strip() else self.message)
+        self.setText(f'<div align="center"><img src="{icon}" width="96" height="96"><p>{html.escape(message)}</p></div>')
         self.setGeometry(self.parentWidget().rect().adjusted(16,8,-16,-8));self.setVisible(self.table.model().rowCount()==0);self.raise_()
     def eventFilter(self,watched,event):
         if event.type() in (QEvent.Show,QEvent.Resize):self.refresh()

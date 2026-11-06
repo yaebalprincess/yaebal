@@ -34,7 +34,7 @@ def allowed_workshops(user: SessionUser) -> tuple[str, ...]:
     # also carry an analytics-only role alongside one or more workshop roles;
     # in that case preserve the explicit workshop assignment instead of
     # silently collapsing it to packaging.
-    if any(role in (ANALYTICS_ROLES - ANALYTICS_ONLY_ROLES) for role in roles):
+    if any(role in ANALYTICS_ROLES for role in roles):
         return tuple(WORKSHOPS)
     result=[]
     for role in roles:
@@ -59,6 +59,7 @@ class WorkshopManager:
         # hashes and IDs once; leave the original database and credentials intact.
         self.auth = Database(self.root / "databases" / "identity.db")
         self._migrate_identity(auth)
+        self.auth.ensure_account_schema()
         self._databases = {"packaging": production}
         self._lock = threading.RLock()
         self._ensure_sessions()
@@ -118,12 +119,13 @@ class WorkshopManager:
             return
         with self.auth.read_conn() as conn:
             row = conn.execute("SELECT username,role,is_active FROM users WHERE id=?", (user.id,)).fetchone()
-        if not row or not row[2] or row[0] != user.username or row[1] != user.role:
+        if not row or not row[2] or row[0] != user.username or split_roles(row[1]) != user.roles:
             raise DatabaseError("Учётная запись изменена или отключена. Войдите заново.")
 
     def require(self, user: SessionUser, permission: str) -> None:
         self.validate_user(user)
-        if not user.can(permission):
+        current=self.auth.permissions_for_user(user.id,user.role) if user.id else user.permissions
+        if permission not in current:
             raise DatabaseError("Недостаточно прав для этой операции")
 
     def database(self, key: str, user: SessionUser) -> "WorkshopDatabase":
@@ -175,7 +177,7 @@ class WorkshopManager:
 
 _AUTH_METHODS = {"list_users", "add_user", "update_user", "delete_user", "set_user_active",
                  "authenticate", "has_users", "startup_bundle", "is_access_control_enabled",
-                 "set_access_control", "role_permissions", "set_role_permissions"}
+                 "set_access_control", "role_permissions", "set_role_permissions", "user_options", "permissions_for_user", "get_personalization", "save_personalization"}
 _MUTATIONS = {
     "set_work_fact_unit": Permission.CATALOG_EDIT,
     "save_order": Permission.ORDERS_CREATE,
@@ -187,7 +189,7 @@ _MUTATIONS = {
     "delete_work_type": Permission.CATALOG_DELETE, "import_work_types": Permission.CATALOG_IMPORT,
     "add_user": Permission.USERS_MANAGE, "update_user": Permission.USERS_MANAGE,
     "delete_user": Permission.USERS_MANAGE, "set_user_active": Permission.USERS_MANAGE,
-    "restore_soft_deleted": Permission.USERS_MANAGE, "restore_from": Permission.USERS_MANAGE,
+    "restore_soft_deleted": Permission.USERS_MANAGE, "restore_from": Permission.BACKUP_RESTORE,
     "set_access_control": Permission.USERS_MANAGE, "set_role_permissions": Permission.PERMISSIONS_MANAGE,
     "acquire_edit_lock": Permission.ORDERS_EDIT,
 }

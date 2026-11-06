@@ -155,8 +155,8 @@ def report_totals(details,orders,today_details,today_orders):
 
 def build_report(manager: WorkshopManager, user: SessionUser, start: date, end: date, workshop=None) -> AnalyticsReport:
     manager.require(user, Permission.ANALYTICS_VIEW)
-    if not any(role in ANALYTICS_ROLES for role in split_roles(user.role)):
-        raise PermissionError("Аналитика доступна администратору, бухгалтеру и экономисту")
+    if not user.can(Permission.ANALYTICS_VIEW):
+        raise PermissionError("Недостаточно прав для просмотра аналитики")
     if start > end:
         raise ValueError("Дата начала позже даты окончания")
     keys = [workshop] if workshop else list(WORKSHOPS)

@@ -156,6 +156,28 @@ class UiSettings:
     about_theme: int = 2
     language: str = "ru"
     order_columns: list = field(default_factory=list)
+    sync_personalization: bool = False
+
+
+LANGUAGE_CODES=("ru","en","es","kk","fr","de","ja","tt")
+
+
+def settings_to_data(settings):
+    from .appearance_config import normalize_appearance
+    return {"theme":settings.theme,"zoom":settings.zoom,"appearance":normalize_appearance(settings.appearance),
+            "remember_personalization":settings.remember_personalization,"auto_theme":settings.auto_theme,
+            "about_theme":settings.about_theme,"language":settings.language,"order_columns":normalize_order_columns(settings.order_columns),
+            "sync_personalization":settings.sync_personalization}
+
+
+def settings_from_data(data):
+    from .appearance_config import normalize_appearance
+    if not isinstance(data,dict):raise ValueError("Некорректная конфигурация")
+    return UiSettings(theme="dark" if data.get("theme")=="dark" else "light",zoom=max(50,min(200,int(data.get("zoom",100)))),
+        appearance=normalize_appearance(data.get("appearance")),remember_personalization=bool(data.get("remember_personalization",True)),
+        auto_theme=bool(data.get("auto_theme",False)),about_theme=1 if data.get("about_theme")==1 else 2,
+        language=data.get("language") if data.get("language") in LANGUAGE_CODES else "ru",
+        order_columns=normalize_order_columns(data.get("order_columns")),sync_personalization=bool(data.get("sync_personalization",False)))
 
 
 def normalize_order_columns(value):
@@ -176,6 +198,7 @@ class SettingsStore:
         suffix = hashlib.sha256(str(username).casefold().encode("utf-8")).hexdigest()[:16]
         self.path = local_state_dir() / (f"ui_{int(user_id)}_{suffix}.json" if self.profile else "ui.json")
         self._session = None
+        self.on_save = None
 
     def load(self) -> UiSettings:
         from .appearance_config import normalize_appearance
@@ -188,17 +211,8 @@ class SettingsStore:
                 # subsequent writes always go to the current user's profile.
                 source = source.with_name("ui.json")
             data = json.loads(source.read_text(encoding="utf-8"))
-            loaded = UiSettings(
-                theme="dark" if data.get("theme") == "dark" else "light",
-                zoom=max(50, min(200, int(data.get("zoom", 100)))),
-                appearance=normalize_appearance(data.get("appearance")),
-                remember_personalization=bool(data.get("remember_personalization", True)),
-                auto_theme=bool(data.get("auto_theme", False)),
-                about_theme=1 if data.get("about_theme") == 1 else 2,
-                language=data.get("language") if data.get("language") in {"ru","en","es"} else "ru",
-                order_columns=normalize_order_columns(data.get("order_columns")),
-            )
-            result=loaded if loaded.remember_personalization or not self.profile else UiSettings(remember_personalization=False)
+            loaded = settings_from_data(data)
+            result=loaded if loaded.remember_personalization or not self.profile else UiSettings(remember_personalization=False,sync_personalization=loaded.sync_personalization)
             self._session=deepcopy(result)
             return result
         except Exception:
@@ -209,14 +223,12 @@ class SettingsStore:
         if self._session == settings: return
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(
-            json.dumps({"theme": settings.theme, "zoom": settings.zoom,
-                        "appearance": normalize_appearance(settings.appearance),
-                        "remember_personalization": settings.remember_personalization,
-                        "auto_theme": settings.auto_theme, "about_theme": settings.about_theme, "language": settings.language, "order_columns": normalize_order_columns(settings.order_columns)}, ensure_ascii=False, indent=2),
+            json.dumps(settings_to_data(settings), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         os.replace(tmp, self.path)
         self._session = deepcopy(settings)
+        if callable(self.on_save):self.on_save(deepcopy(settings))
 
     def set_startup_enabled(self, settings, enabled):
         try: data=json.loads(self.path.read_text(encoding="utf-8"))
@@ -228,3 +240,4 @@ class SettingsStore:
         tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding="utf-8")
         os.replace(tmp,self.path)
         settings.remember_personalization=bool(enabled);self._session=deepcopy(settings)
+        if callable(self.on_save):self.on_save(settings_from_data(data))

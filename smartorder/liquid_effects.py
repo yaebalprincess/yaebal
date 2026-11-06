@@ -317,6 +317,21 @@ class LiquidController(QObject):
         finally:
             self._styling = False
 
+    def refresh_theme(self,root,theme):
+        """The selected stylesheet repaints native controls in one Qt pass."""
+        root.setProperty("theme",theme);root._liquid_applied_theme=theme
+        from .symbols import symbol_icon
+        for widget in root.findChildren(QWidget):
+            if not widget.isVisible():continue
+            if hasattr(widget,"setTheme"):
+                widget.setTheme(theme)
+            if '[theme=' in widget.styleSheet():
+                widget.setProperty("theme",theme);widget.style().unpolish(widget);widget.style().polish(widget)
+            name=widget.property("symbolIcon")
+            if name and hasattr(widget,"setIcon"):widget.setIcon(symbol_icon(name,theme))
+        for child in root.findChildren(GlassBackdrop):child.update()
+        root.update()
+
     @staticmethod
     def is_overlay(widget):
         # Qt creates private combo popup windows during polish. Converting those

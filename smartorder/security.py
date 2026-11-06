@@ -17,7 +17,7 @@ _LEGACY_SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
 
 def split_roles(value: str | object) -> tuple[str, ...]:
     """Normalize legacy single roles and the new semicolon-separated roles."""
-    return tuple(dict.fromkeys(part.strip() for part in re.split(r"[;,|]+", str(value or "")) if part.strip()))
+    return tuple(dict.fromkeys(("Экономист" if part.strip()=="Аналитик" else part.strip()) for part in re.split(r"[;,|]+", str(value or "")) if part.strip()))
 
 
 def has_role(value: str | object, role: str) -> bool:
@@ -80,6 +80,14 @@ class Permission:
     ORDERS_CREATE = "orders.create"
     ORDERS_EDIT = "orders.edit"
     ORDERS_EXPORT = "orders.export"
+    ORDERS_FILTER = "orders.filter"
+    ORDERS_HISTORY = "orders.history"
+    ORDERS_DELETE_DRAFT = "orders.delete_draft"
+    NOTIFICATIONS_VIEW = "notifications.view"
+    USERS_VIEW = "users.view"
+    DATA_SYNC = "data.sync"
+    DIAGNOSTICS_VIEW = "diagnostics.view"
+    APP_UPDATE = "app.update"
     CATALOG_VIEW = "catalog.view"
     CATALOG_CREATE = "catalog.create"
     CATALOG_EDIT = "catalog.edit"
@@ -95,6 +103,9 @@ class Permission:
     PERMISSIONS_MANAGE = "permissions.manage"
     AUDIT_VIEW = "audit.view"
     BACKUP_MANAGE = "backup.manage"
+    BACKUP_RESTORE = "backup.restore"
+    BACKUP_DELETE = "backup.delete"
+    IDENTITY_BACKUP = "identity.backup"
     ANALYTICS_VIEW = "analytics.view"
     ANALYTICS_EXPORT = "analytics.export"
 
@@ -105,6 +116,14 @@ ALL_PERMISSIONS = [
 ]
 
 PERMISSION_LABELS = {
+    Permission.ORDERS_FILTER: "Наряды: фильтры",
+    Permission.ORDERS_HISTORY: "Наряды: история изменений",
+    Permission.ORDERS_DELETE_DRAFT: "Наряды: удаление черновиков",
+    Permission.NOTIFICATIONS_VIEW: "Уведомления: просмотр",
+    Permission.USERS_VIEW: "Пользователи: просмотр",
+    Permission.DATA_SYNC: "Данные: синхронизация",
+    Permission.DIAGNOSTICS_VIEW: "Диагностика: просмотр",
+    Permission.APP_UPDATE: "Программа: обновление",
     Permission.ORDERS_VIEW: "Наряды: просмотр",
     Permission.ORDERS_CREATE: "Наряды: создание",
     Permission.ORDERS_EDIT: "Наряды: редактирование",
@@ -124,12 +143,15 @@ PERMISSION_LABELS = {
     Permission.PERMISSIONS_MANAGE: "Роли: права",
     Permission.AUDIT_VIEW: "Журнал: просмотр",
     Permission.BACKUP_MANAGE: "База: резервные копии",
+    Permission.BACKUP_RESTORE: "База: восстановление",
+    Permission.BACKUP_DELETE: "База: удаление копий",
+    Permission.IDENTITY_BACKUP: "Учётные записи: резервная копия",
     Permission.ANALYTICS_VIEW: "Аналитика: просмотр",
     Permission.ANALYTICS_EXPORT: "Аналитика: Excel",
 }
 
 DEFAULT_ROLE_PERMISSIONS = {
-    # Fixed RBAC from the SmartOrder specification. No per-role editor.
+    # Role defaults; an account may replace these with explicit permissions.
     "Администратор": set(ALL_PERMISSIONS),
     "Мастер": {
         # Full Orders + Employees. Administration is visible for synchronization,
@@ -150,8 +172,8 @@ DEFAULT_ROLE_PERMISSIONS = {
 }
 
 ACCOUNTING_ROLES = {"Бухгалтер", "Экономист"}
-ANALYTICS_ROLES = {"Администратор", "Бухгалтер", "Экономист", "Аналитик"}
-ANALYTICS_ONLY_ROLES = {"Аналитик"}
+ANALYTICS_ROLES = {"Администратор", "Бухгалтер", "Экономист"}
+ANALYTICS_ONLY_ROLES = {"Экономист"}
 WORKSHOP_ROLES = {
     "Мастер Упаковка": ("packaging",),
     "Мастер Коптильный Цех": ("smoking", "drying"),
@@ -163,12 +185,13 @@ WORKSHOP_ROLES = {
     "Мастер": ("packaging",),
 }
 DEFAULT_ROLE_PERMISSIONS["Бухгалтер"].update({Permission.ANALYTICS_VIEW, Permission.ANALYTICS_EXPORT})
-DEFAULT_ROLE_PERMISSIONS["Экономист"] = set(DEFAULT_ROLE_PERMISSIONS["Бухгалтер"])
-DEFAULT_ROLE_PERMISSIONS["Аналитик"] = {Permission.ORDERS_VIEW, Permission.ANALYTICS_VIEW, Permission.ANALYTICS_EXPORT}
+DEFAULT_ROLE_PERMISSIONS["Мастер"].update({Permission.ORDERS_FILTER, Permission.ORDERS_HISTORY, Permission.ORDERS_DELETE_DRAFT, Permission.NOTIFICATIONS_VIEW, Permission.DATA_SYNC, Permission.DIAGNOSTICS_VIEW})
+DEFAULT_ROLE_PERMISSIONS["Бухгалтер"].update({Permission.ORDERS_FILTER, Permission.NOTIFICATIONS_VIEW, Permission.DATA_SYNC, Permission.DIAGNOSTICS_VIEW})
+DEFAULT_ROLE_PERMISSIONS["Экономист"] = {Permission.ORDERS_VIEW, Permission.ANALYTICS_VIEW, Permission.ANALYTICS_EXPORT, Permission.NOTIFICATIONS_VIEW}
 for _role in WORKSHOP_ROLES:
     DEFAULT_ROLE_PERMISSIONS[_role] = set(DEFAULT_ROLE_PERMISSIONS["Мастер"])
 ROLES = [
-    "Администратор", "Бухгалтер", "Экономист", "Аналитик",
+    "Администратор", "Бухгалтер", "Экономист",
     *(r for r in sorted(WORKSHOP_ROLES) if r != "Мастер"),
 ]
 

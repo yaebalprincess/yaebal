@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import hashlib
 import socket
 import sqlite3
@@ -14,6 +15,8 @@ from pathlib import Path
 from typing import Iterable
 
 from .domain import OrderLine, dec
+from .account_store import UNSET
+from .security import Permission
 from .security import (
     ALL_PERMISSIONS,
     DEFAULT_ROLE_PERMISSIONS,
@@ -652,6 +655,26 @@ class Database:
             self._audit_conn(conn, username.strip(), "Создал", "Пользователь", username.strip(), "Первый администратор")
             return int(cur.lastrowid)
 
+    def ensure_account_schema(self):
+        from .account_store import ensure_accounts
+        ensure_accounts(self)
+
+    def user_options(self, user_id):
+        from .account_store import options
+        return options(self, user_id)
+
+    def permissions_for_user(self, user_id, role):
+        from .account_store import effective_permissions
+        return effective_permissions(self, user_id, role)
+
+    def get_personalization(self, actor):
+        from .account_store import get_personalization
+        return get_personalization(self, actor)
+
+    def save_personalization(self, actor, enabled, payload):
+        from .account_store import save_personalization
+        return save_personalization(self, actor, enabled, payload)
+
     def role_permissions(self, role: str) -> frozenset[str]:
         """Fixed permissions from the technical specification.
 
@@ -670,6 +693,8 @@ class Database:
         # the login form.  Existing legacy accounts remain readable.
         if not username or len(username) > 128 or len(str(password or "")) > 4096:
             return None
+        from .account_store import activate_due
+        activate_due(self)
         with self.read_conn() as conn:
             row = conn.execute(
                 "SELECT id,username,password_hash,role,COALESCE(is_active,1) FROM users WHERE username=? COLLATE NOCASE",
@@ -691,75 +716,77 @@ class Database:
                     conn.execute("UPDATE users SET password_hash=? WHERE id=?", (hash_password(password), int(row[0])))
             except Exception:
                 pass
-        return SessionUser(int(row[0]), str(row[1]), str(row[3]), self.role_permissions(str(row[3])))
+        return SessionUser(int(row[0]), str(row[1]), ";".join(split_roles(row[3])), self.permissions_for_user(int(row[0]), str(row[3])))
 
     def list_users(self) -> list[sqlite3.Row]:
+        from .account_store import activate_due
+        activate_due(self)
         with self.read_conn() as conn:
-            return conn.execute(
-                "SELECT id,username,role,COALESCE(is_active,1) AS is_active FROM users ORDER BY username COLLATE NOCASE"
-            ).fetchall()
+            return conn.execute("SELECT u.id,u.username,u.role,COALESCE(u.is_active,1) AS is_active,o.activate_at FROM users u LEFT JOIN account_options o ON o.user_id=u.id ORDER BY u.username COLLATE NOCASE").fetchall()
 
-    def add_user(self, actor: SessionUser, username: str, password: str, role: str) -> None:
-        username = str(username or "").strip()
-        password = str(password or "")
-        role = str(role or "").strip()
-        if not username or len(username) > 128 or any(ord(ch) < 32 for ch in username):
+    def add_user(self, actor: SessionUser, username: str, password: str, role: str, *, permissions=None, activate_at=None) -> None:
+        from .account_store import validate_actor, normalized_permissions, activation_value
+        current=validate_actor(self,actor,Permission.USERS_MANAGE)
+        username=str(username or "").strip();password=str(password or "")
+        names=split_roles(role);role=";".join(names)
+        if not username or len(username)>128 or any(ord(ch)<32 for ch in username):
             raise ValueError("Логин обязателен и должен быть не длиннее 128 символов")
-        if len(password) < 8:
-            raise ValueError("Пароль должен содержать не менее 8 символов.")
-        if len(password) > 4096:
-            raise ValueError("Пароль слишком длинный.")
-        role_names=split_roles(role)
-        if not role_names or any(name not in DEFAULT_ROLE_PERMISSIONS for name in role_names):
-            raise ValueError("Неизвестная роль пользователя")
+        if len(password)<8:raise ValueError("Пароль должен содержать не менее 8 символов.")
+        if len(password)>4096:raise ValueError("Пароль слишком длинный.")
+        if not names or any(name not in DEFAULT_ROLE_PERMISSIONS for name in names):raise ValueError("Неизвестная роль пользователя")
+        chosen=normalized_permissions(permissions);activation=activation_value(activate_at)
+        requested=self.role_permissions(role) if chosen is None else set(chosen)
+        if Permission.PERMISSIONS_MANAGE not in current and (chosen is not None or not set(requested)<=set(current)):
+            raise DatabaseError("Нет прав на назначение этих разрешений")
+        encoded=hash_password(password)
         with self.write_conn() as conn:
-            conn.execute(
-                "INSERT INTO users(username,password_hash,role,is_active) VALUES(?,?,?,1)",
-                (username, hash_password(password), role),
-            )
-            self._audit_conn(conn, actor.username, "Добавил", "Пользователь", username, f"Роль: {role}")
+            cur=conn.execute("INSERT INTO users(username,password_hash,role,is_active) VALUES(?,?,?,?)",(username,encoded,role,0 if activation else 1))
+            conn.execute("INSERT INTO account_options(user_id,permissions_json,activate_at) VALUES(?,?,?)",(cur.lastrowid,json.dumps(chosen) if chosen is not None else None,activation))
+            self._audit_conn(conn,actor.username,"Добавил","Пользователь",username,f"Роль: {role}; активация: {activation or 'сразу'}; индивидуальные права: {chosen is not None}")
 
-    def update_user(self, actor: SessionUser, user_id: int, username: str, role: str, password: str = "") -> None:
-        username = str(username or "").strip()
-        password = str(password or "")
-        role = str(role or "").strip()
-        if not username or len(username) > 128 or any(ord(ch) < 32 for ch in username):
-            raise ValueError("Логин обязателен и должен быть не длиннее 128 символов")
-        role_names=split_roles(role)
-        if not role_names or any(name not in DEFAULT_ROLE_PERMISSIONS for name in role_names):
-            raise ValueError("Неизвестная роль пользователя")
+    def update_user(self, actor: SessionUser, user_id: int, username: str, role: str, password: str = "", *, permissions=UNSET, activate_at=UNSET) -> None:
+        from .account_store import validate_actor, normalized_permissions, activation_value, guard_last_admin
+        current=validate_actor(self,actor,Permission.USERS_MANAGE)
+        username=str(username or "").strip();password=str(password or "");names=split_roles(role);role=";".join(names)
+        if not username or len(username)>128 or any(ord(ch)<32 for ch in username):raise ValueError("Логин обязателен и должен быть не длиннее 128 символов")
+        if not names or any(name not in DEFAULT_ROLE_PERMISSIONS for name in names):raise ValueError("Неизвестная роль пользователя")
+        if password and len(password)<8:raise ValueError("Пароль должен содержать не менее 8 символов.")
+        if len(password)>4096:raise ValueError("Пароль слишком длинный.")
+        chosen=UNSET if permissions is UNSET else normalized_permissions(permissions)
+        activation=UNSET if activate_at is UNSET else activation_value(activate_at)
+        encoded=hash_password(password) if password else None
         with self.write_conn() as conn:
-            if password:
-                if len(password) < 8:
-                    raise ValueError("Пароль должен содержать не менее 8 символов.")
-                if len(password) > 4096:
-                    raise ValueError("Пароль слишком длинный.")
-                conn.execute(
-                    "UPDATE users SET username=?,role=?,password_hash=? WHERE id=?",
-                    (username, role, hash_password(password), user_id),
-                )
-            else:
-                conn.execute("UPDATE users SET username=?,role=? WHERE id=?", (username, role, user_id))
-            self._audit_conn(conn, actor.username, "Изменил", "Пользователь", username, f"Роль: {role}")
+            old=conn.execute("SELECT role,is_active FROM users WHERE id=?",(user_id,)).fetchone()
+            if old is None:raise DatabaseError("Пользователь не найден")
+            prior=conn.execute("SELECT permissions_json,activate_at FROM account_options WHERE user_id=?",(user_id,)).fetchone()
+            if Permission.PERMISSIONS_MANAGE not in current and (chosen is not UNSET or split_roles(old[0])!=names):
+                raise DatabaseError("Нет прав на изменение разрешений пользователя")
+            if chosen is UNSET:chosen=json.loads(prior[0]) if prior and prior[0] is not None else None
+            if activation is UNSET:activation=prior[1] if prior else None
+            active=0 if activation else int(old[1])
+            guard_last_admin(self,conn,user_id,role,active,chosen)
+            conn.execute("UPDATE users SET username=?,role=?,is_active=? WHERE id=?",(username,role,active,user_id))
+            if encoded:conn.execute("UPDATE users SET password_hash=? WHERE id=?",(encoded,user_id))
+            conn.execute("INSERT INTO account_options(user_id,permissions_json,activate_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET permissions_json=excluded.permissions_json,activate_at=excluded.activate_at",(user_id,json.dumps(chosen) if chosen is not None else None,activation))
+            self._audit_conn(conn,actor.username,"Изменил","Пользователь",username,f"Роль: {role}; активация: {activation or 'не задана'}; индивидуальные права: {chosen is not None}")
 
     def set_user_active(self, actor: SessionUser, user_id: int, active: bool) -> None:
+        from .account_store import validate_actor, guard_last_admin
+        validate_actor(self,actor,Permission.USERS_MANAGE)
         with self.write_conn() as conn:
-            row = conn.execute("SELECT username,role FROM users WHERE id=?", (user_id,)).fetchone()
-            if not row:
-                return
-            if not active and "Администратор" in split_roles(row[1]):
-                count = sum(
-                    1 for candidate in conn.execute(
-                        "SELECT role FROM users WHERE COALESCE(is_active,1)=1 AND id<>?", (user_id,)
-                    ).fetchall() if "Администратор" in split_roles(candidate[0])
-                )
-                if count == 0:
-                    raise DatabaseError("Нельзя отключить последнего активного администратора")
-            conn.execute("UPDATE users SET is_active=? WHERE id=?", (1 if active else 0, user_id))
-            self._audit_conn(conn, actor.username, "Включил" if active else "Отключил", "Пользователь", str(row[0]), "")
+            row=conn.execute("SELECT username,role FROM users WHERE id=?",(user_id,)).fetchone()
+            if not row:return
+            option=conn.execute("SELECT permissions_json FROM account_options WHERE user_id=?",(user_id,)).fetchone()
+            chosen=json.loads(option[0]) if option and option[0] is not None else None
+            guard_last_admin(self,conn,user_id,row[1],active,chosen)
+            conn.execute("UPDATE users SET is_active=? WHERE id=?",(int(bool(active)),user_id))
+            conn.execute("UPDATE account_options SET activate_at=NULL WHERE user_id=?",(user_id,))
+            self._audit_conn(conn,actor.username,"Включил" if active else "Отключил","Пользователь",str(row[0]),"")
 
     def delete_user(self, actor: SessionUser, user_id: int) -> None:
         """Delete a user while protecting the current and last admin accounts."""
+        from .account_store import validate_actor
+        validate_actor(self,actor,Permission.USERS_MANAGE)
         user_id = int(user_id)
         if int(actor.id) == user_id:
             raise DatabaseError("Нельзя удалить текущего пользователя")
@@ -775,6 +802,8 @@ class Database:
                 )
                 if count == 0:
                     raise DatabaseError("Нельзя удалить последнего администратора")
+            conn.execute("DELETE FROM account_options WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM user_personalization WHERE user_id=?", (user_id,))
             conn.execute("DELETE FROM users WHERE id=?", (user_id,))
             self._audit_conn(conn, actor.username, "Удалил", "Пользователь", username, f"Роль: {role}")
 

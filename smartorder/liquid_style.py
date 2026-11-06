@@ -24,7 +24,7 @@ def colors(dark=False):
     }
 
 
-def liquid_qss(zoom=100, appearance=None):
+def liquid_qss(zoom=100, appearance=None, selected_theme=None):
     from .config import resource_path
     checkmark=resource_path("smartorder/glass/assets/checkmark.svg").as_posix()
     scale = max(.5, min(2, int(zoom) / 100))
@@ -37,11 +37,12 @@ QLabel {{ background:transparent; }}
 QLabel#TitleLabel {{ font-size:{round(24 * scale)}px; font-weight:700; }}
 QLabel#SectionTitle {{ font-size:{round(17 * scale)}px; font-weight:700; }}
 QPushButton {{ min-height:{height}px; padding:6px 12px; border-radius:9px; font-weight:600; }}
-QPushButton:focus, QToolButton:focus {{ border:2px solid #0785ff; }}
+QPushButton:focus, QToolButton:focus {{ border:1px solid #0785ff; outline:0; }}
 QToolButton {{ border-radius:6px; padding:4px; }}
-QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox {{ min-height:{height}px; padding:4px 9px; border-radius:9px; }}
+QLineEdit, QComboBox, QDateEdit, QDateTimeEdit, QSpinBox, QDoubleSpinBox {{ min-height:{height}px; padding:4px 9px; border-radius:9px; }}
 QTextEdit, QPlainTextEdit, QTextBrowser {{ padding:8px; border-radius:10px; }}
-QComboBox::drop-down, QDateEdit::drop-down {{ width:28px; border:0; }}
+QComboBox {{ combobox-popup:0; }}
+QComboBox::drop-down, QDateEdit::drop-down, QDateTimeEdit::drop-down {{ width:28px; border:0; }}
 QGroupBox {{ margin-top:22px; padding:18px 12px 12px; border-radius:14px; font-weight:600; }}
 QGroupBox::title {{ subcontrol-origin:margin; subcontrol-position:top left; left:12px; top:4px; padding:0 7px; }}
 QFrame#GlassPanel, QWidget#GlassPanel, QFrame#LoginCard, QFrame#LiquidCard {{ border-radius:15px; }}
@@ -51,6 +52,8 @@ QTabWidget::pane {{ border:0; top:0; }}
 QTabBar {{ background:transparent; }}
 QTabBar::tab {{ min-height:{height}px; padding:6px 18px; border-top-left-radius:8px; border-top-right-radius:8px; margin-right:0; font-weight:600; }}
 QTableView, QTableWidget, QListView, QTreeView {{ border-radius:12px; outline:0; }}
+QTabBar::tab:disabled {{ color:#8b9caf; }}
+QAbstractButton:disabled {{ color:#8b9caf; }}
 QTableView::item, QTableWidget::item {{ padding:5px 8px; border:0; }}
 QListView::item, QTreeView::item {{ padding:7px 9px; border-radius:6px; }}
 QHeaderView::section {{ padding:8px; border:0; border-right:1px solid rgba(102,148,196,60); }}
@@ -99,7 +102,7 @@ QLabel#DbStateBad {{ color:#e44f67; font-weight:700; }}
         qss += f'QPushButton#PrimaryButton[theme="{theme}"]:hover{{background:#178dff;}}\n'
         qss += f'QPushButton#DangerButton[theme="{theme}"],QPushButton#UserDeleteButton[theme="{theme}"]{{color:{"#ff93ad" if theme == "dark" else "#ed355b"};border-color:rgba(240,120,160,135);background:rgba(235,118,160,35);}}\n'
         qss += f'QPushButton#GhostButton[theme="{theme}"]{{border-color:transparent;background:transparent;}}\n'
-        qss += rule("QLineEdit,QComboBox,QDateEdit,QSpinBox,QDoubleSpinBox,QTextEdit,QPlainTextEdit,QTextBrowser", f'color:{c["ink"]};background:{c["field"]};border:1px solid {c["line"]};selection-background-color:#168aff;selection-color:white;')
+        qss += rule("QLineEdit,QComboBox,QDateEdit,QDateTimeEdit,QSpinBox,QDoubleSpinBox,QTextEdit,QPlainTextEdit,QTextBrowser", f'color:{c["ink"]};background:{c["field"]};border:1px solid {c["line"]};selection-background-color:#168aff;selection-color:white;')
         qss += f'QLineEdit[theme="{theme}"]:focus,QComboBox[theme="{theme}"]:focus,QTextEdit[theme="{theme}"]:focus,QPlainTextEdit[theme="{theme}"]:focus{{border:1px solid #0785ff;}}\n'
         qss += f'QLineEdit[theme="{theme}"]:disabled,QComboBox[theme="{theme}"]:disabled{{color:{c["disabled"]};}}\n'
         qss += rule("QGroupBox,QFrame#GlassPanel,QWidget#GlassPanel,QFrame#LoginCard,QFrame#LiquidCard", f'color:{c["ink"]};background:{c["glass"]};border:1px solid {c["edge"]};')
@@ -123,6 +126,10 @@ QLabel#DbStateBad {{ color:#e44f67; font-weight:700; }}
         qss+=f'QPushButton#NotificationBell[theme="{theme}"]:pressed,QPushButton#NotificationBell[theme="{theme}"]:checked{{color:{c["blue"]};background:{c["selected"]};}}'
         qss+=f'QListView[theme="{theme}"]::indicator{{width:17px;height:17px;border:1px solid {c["line"]};border-radius:4px;background:{c["field"]};}}'
         qss+=f'QListView[theme="{theme}"]::indicator:checked{{background:#0785ff;border:1px solid #0785ff;image:url("{checkmark}");}}'
+    from .config import resource_path
+    arrow_down=resource_path("smartorder/glass/assets/chevron-down.svg").as_posix()
+    arrow_up=resource_path("smartorder/glass/assets/chevron-up.svg").as_posix()
+    qss+=f'QComboBox::down-arrow{{image:url("{arrow_down}");width:12px;height:8px;}}QAbstractSpinBox::up-arrow{{image:url("{arrow_up}");width:10px;height:7px;}}QAbstractSpinBox::down-arrow{{image:url("{arrow_down}");width:10px;height:7px;}}QAbstractSpinBox::up-button,QAbstractSpinBox::down-button{{background:rgba(101,168,227,35);border:0;width:20px;border-radius:4px;}}'
     from .appearance import typography_qss
     qss += '''
 QMenu[glassOverlay="true"]{background:rgba(242,250,255,30);}
@@ -131,4 +138,12 @@ QWidget[glassOverlay="true"] QScrollArea{background:transparent;}
 QWidget[glassOverlay="true"] QTextBrowser{background:rgba(246,252,255,80);}
 QWidget[glassOverlay="true"][theme="dark"] QTextBrowser{background:rgba(20,39,62,85);}
 '''
-    return qss + typography_qss(appearance, zoom)
+    qss += typography_qss(appearance, zoom)
+    if selected_theme in ("light","dark"):
+        import re
+        other="dark" if selected_theme=="light" else "light"
+        def choose(match):
+            selectors=[part.strip().replace('[theme="'+selected_theme+'"]',"") for part in match[1].split(',') if '[theme="'+other+'"]' not in part]
+            return ','.join(selectors)+'{'+match[2]+'}' if selectors else ''
+        qss=re.sub(r'([^{}]+)\{([^{}]*)\}',choose,qss)
+    return qss

@@ -105,7 +105,7 @@
     }
     const value = filter.value === null ? "" : String(filter.value);
     if (control.value !== value) control.value = value;
-    control.disabled = !state.allowed || state.busy;
+    control.disabled = !state.allowed || !state.canFilter || state.busy;
   }
   function render(raw) {
     state = typeof raw === "string" ? JSON.parse(raw) : raw;
@@ -154,7 +154,7 @@
     for (const name of ["master", "shift", "department"]) renderSelect(name, state.filters[name]);
     $("date-value").textContent = state.filters.date;
     $("date").title = state.filters.date + " · Выбрать дату или период";
-    $("date").disabled = !state.allowed || state.busy;
+    $("date").disabled = !state.allowed || !state.canFilter || state.busy;
     for (const [name, action] of Object.entries(state.actions)) {
       $(name).hidden = !action.visible;
       $(name).disabled = !action.enabled;
@@ -164,7 +164,7 @@
     if (window.innerWidth > 1000) $("order-actions").style.gridTemplateColumns = "repeat(" + Math.max(1, visibleActions) + ", minmax(0, 1fr))";
     renderRows(state.rows);
     $("empty-orders").hidden=state.rows.length>0||!state.allowed||state.busy;
-    $("empty-orders").textContent=state.emptyMessage;
+    $("empty-message").textContent=state.emptyMessage;
     const columnsKey=JSON.stringify(state.columns||[]);
     if(!columnDrag&&columnsKey!==columnSignature){columnSignature=columnsKey;if(state.columns&&state.columns.length===6)applyColumns(state.columns);}
     selectRow(state.selected, false);
@@ -180,7 +180,7 @@
       });
       replaceContent($("history"), fragment);
     }
-    $("access-overlay").hidden = state.allowed;
+    $("access-overlay").hidden = !state.topRestricted;
     $("table-panel").setAttribute("aria-busy", state.busy ? "true" : "false");
     window.GlassPopovers.update(state, send);
   }

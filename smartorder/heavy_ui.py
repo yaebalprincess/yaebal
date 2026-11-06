@@ -116,6 +116,9 @@ class AnimatedToggle(QCheckBox):
         self._offset = int(value)
         self.update()
 
+    def hitButton(self,point):
+        return self.rect().contains(point)
+
     def paintEvent(self, event):
         from PyQt5.QtCore import QRectF
         painter = QPainter(self)
@@ -176,54 +179,29 @@ class SmartComboBox(QComboBox):
         super().leaveEvent(event)
 
     def showPopup(self):
-        # Qt renders the combo popup in a separate view/window, so inherited
-        # dynamic properties are not reliable. Apply the current Heavy theme
-        # directly to the popup every time it opens.
-        theme = str(self.property("theme") or "").lower()
-        if theme not in ("dark", "light"):
-            w = self.window()
-            theme = str(w.property("theme") or "light").lower() if w is not None else "light"
-        view = self.view()
-        try:
-            view.setProperty("theme", theme)
-            if theme == "dark":
-                view.setStyleSheet(
-                    "QAbstractItemView{background:#2C2C2E;color:#F5F5F7;"
-                    "border:1px solid rgba(255,255,255,35);selection-background-color:#0A84FF;"
-                    "selection-color:#FFFFFF;outline:0;padding:6px;}"
-                    "QAbstractItemView::item{min-height:30px;padding:4px 8px;}"
-                    "QAbstractItemView::item:hover{background:#3A3A3C;color:#FFFFFF;}"
-                )
-            else:
-                view.setStyleSheet(
-                    "QAbstractItemView{background:#FFFFFF;color:#1D1D1F;"
-                    "border:1px solid rgba(60,60,67,36);selection-background-color:#E5F1FB;"
-                    "selection-color:#007AFF;outline:0;padding:6px;}"
-                    "QAbstractItemView::item{min-height:30px;padding:4px 8px;}"
-                    "QAbstractItemView::item:hover{background:#EEF6FF;color:#007AFF;}"
-                )
-        except Exception:
-            pass
-        # Avoid oversized native popup windows with a large empty tail.
-        try:
-            self.setMaxVisibleItems(min(10,max(1,self.count())))
-            view.setUniformItemSizes(True)
-            view.setMinimumHeight(0)
-        except Exception:
-            pass
+        from .interaction_ui import prepare_combo_popup
+        prepare_combo_popup(self)
+        self.setMaxVisibleItems(min(10,max(1,self.count())))
+        self.view().setUniformItemSizes(True)
         super().showPopup()
+        frame=self.view().window();point=self.mapToGlobal(QPoint(0,self.height()+3))
+        screen=QApplication.screenAt(point) or QApplication.primaryScreen();available=screen.availableGeometry()
+        frame.move(max(available.left(),min(point.x(),available.right()-frame.width()+1)),min(point.y(),available.bottom()-frame.height()+1))
 
     def paintEvent(self, event):
-        super().paintEvent(event)
+        from PyQt5.QtWidgets import QStylePainter,QStyleOptionComboBox,QStyle
+        option=QStyleOptionComboBox();self.initStyleOption(option);option.state &= ~QStyle.State_HasFocus
+        native=QStylePainter(self);native.drawComplexControl(QStyle.CC_ComboBox,option);native.drawControl(QStyle.CE_ComboBoxLabel,option);native.end()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        theme = self.property("theme") or "light"
+        from .liquid_effects import theme_of
+        theme = theme_of(self)
         rect = self._arrow_rect()
         alpha = 55 if self._arrow_pressed else (34 if self._arrow_hover else 16)
         painter.setBrush(QColor(0, 122, 255, alpha))
         painter.setPen(Qt.NoPen)
         painter.drawRoundedRect(rect, 9, 9)
-        painter.setBrush(QColor("#F5F5F7") if theme == "dark" else QColor("#1D1D1F"))
+        painter.setBrush(QColor("#b9dcff") if theme == "dark" else QColor("#527fa7"))
         cx, cy = rect.x() + rect.width() // 2, rect.y() + rect.height() // 2 + 2
         painter.drawPolygon(QPolygon([QPoint(cx - 7, cy - 4), QPoint(cx + 7, cy - 4), QPoint(cx, cy + 5)]))
 
@@ -669,7 +647,7 @@ class HeavyMainWindow(BaseMainWindow):
         self.theme_caption=QLabel("Светлая тема"); self.theme_caption.setStyleSheet("font-weight:800;background:transparent;"); top.addWidget(self.theme_caption)
         self.theme=AnimatedToggle(); self.theme.setChecked(self.ui_settings.theme=="dark"); self.theme.toggled.connect(self._theme_toggled); top.addWidget(self.theme)
         main.addLayout(top)
-        self.tabs=QTabWidget(); self.tabs.setUsesScrollButtons(True); self.tabs.setElideMode(Qt.ElideNone); self.tabs.tabBar().setExpanding(False); self.tabs.tabBar().setMinimumHeight(46); self.tabs.currentChanged.connect(self._tab_changed)
+        self.tabs=QTabWidget();from .interaction_ui import FittingTabBar;self.tabs.setTabBar(FittingTabBar(self.tabs)); self.tabs.setUsesScrollButtons(True); self.tabs.setElideMode(Qt.ElideNone); self.tabs.tabBar().setExpanding(False); self.tabs.tabBar().setMinimumHeight(46); self.tabs.currentChanged.connect(self._tab_changed)
         self._loaded_tabs={0}; self._building_tab=False
         self._build_orders_tab()
         for title in ("Номенклатура","Сотрудники","Администрирование","О приложении ⍰"):
@@ -1649,7 +1627,7 @@ class RC3MainWindow(HeavyMainWindow):
         top = ResponsiveGrid([zoom_cell, hint_cell], min_cell_width=360, max_columns=2)
         top.setContentsMargins(4, 2, 4, 2)
         main.addWidget(top)
-        self.tabs=QTabWidget();self.tabs.setUsesScrollButtons(True);self.tabs.setElideMode(Qt.ElideNone);self.tabs.tabBar().setExpanding(False);self.tabs.tabBar().setMinimumHeight(46);self.tabs.currentChanged.connect(self._tab_changed);self._loaded_tabs={0};self._building_tab=False;self._build_orders_tab()
+        self.tabs=QTabWidget();from .interaction_ui import FittingTabBar;self.tabs.setTabBar(FittingTabBar(self.tabs));self.tabs.setUsesScrollButtons(True);self.tabs.setElideMode(Qt.ElideNone);self.tabs.tabBar().setExpanding(False);self.tabs.tabBar().setMinimumHeight(46);self.tabs.currentChanged.connect(self._tab_changed);self._loaded_tabs={0};self._building_tab=False;self._build_orders_tab()
         for title in ("Номенклатура","Сотрудники","Администрирование","О приложении ⍰"):self.tabs.addTab(QWidget(),title)
         # RC9 fixed RBAC from the technical specification.
         # All tabs remain visible in the same order for every role.
@@ -1737,7 +1715,7 @@ class RC3MainWindow(HeavyMainWindow):
         self.delete_draft_btn.setObjectName("DangerButton")
         self.delete_draft_btn.clicked.connect(self.delete_selected_draft)
         self.delete_draft_btn.setEnabled(False)
-        self.delete_draft_btn.setVisible(not self.user.has_any_role(ACCOUNTING_ROLES))
+        self.delete_draft_btn.setVisible(True)
         buttons.append(self.delete_draft_btn)
         for button in buttons:
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -1804,7 +1782,7 @@ class RC3MainWindow(HeavyMainWindow):
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setWidget(page)
         self.orders_scroll = scroll
-        self.info_panel.setVisible(not self.user.has_any_role(ACCOUNTING_ROLES))
+        self.info_panel.setVisible(self.can(Permission.ORDERS_HISTORY))
         self.tabs.addTab(scroll, "Наряд")
 
     def refresh_orders(self):
@@ -1834,7 +1812,7 @@ class RC3MainWindow(HeavyMainWindow):
         except Exception as exc:self.orders_table.setUpdatesEnabled(True);error(self,"Не удалось загрузить наряды",exc)
 
     def _order_selection_changed(self):
-        ref=self._selected_ref();is_draft=isinstance(ref,str) and ref.lower().endswith(".json");self.edit_order_btn.setEnabled(bool(ref) and self.can(Permission.ORDERS_EDIT));self.export_order_btn.setEnabled(isinstance(ref,int) and self.can(Permission.ORDERS_EXPORT));self.delete_draft_btn.setEnabled(is_draft and not self.user.has_any_role(ACCOUNTING_ROLES));self.info_users_list.clear()
+        ref=self._selected_ref();is_draft=isinstance(ref,str) and ref.lower().endswith(".json");self.edit_order_btn.setEnabled(bool(ref) and self.can(Permission.ORDERS_EDIT));self.export_order_btn.setEnabled(isinstance(ref,int) and self.can(Permission.ORDERS_EXPORT));self.delete_draft_btn.setEnabled(is_draft and self.can(Permission.ORDERS_DELETE_DRAFT));self.info_users_list.clear()
         if isinstance(ref,int):
             try:
                 history=list(reversed(self.db.order_history(ref)))
@@ -1846,7 +1824,7 @@ class RC3MainWindow(HeavyMainWindow):
         elif is_draft:self.info_users_list.addItem("Локальный черновик текущего пользователя")
 
     def _open_selected(self):
-        if self.user.has_any_role(ACCOUNTING_ROLES):return
+        if not self.can(Permission.ORDERS_HISTORY):return
         return super()._open_selected()
 
     def delete_selected_draft(self):
@@ -1862,11 +1840,11 @@ class RC3MainWindow(HeavyMainWindow):
     def _orders_context_menu(self,pos):
         if self.orders_table.itemAt(pos) is None:return
         self.orders_table.selectRow(self.orders_table.itemAt(pos).row());ref=self._selected_ref();menu=QMenu(self)
-        if not self.user.has_any_role(ACCOUNTING_ROLES):
+        if self.can(Permission.ORDERS_HISTORY):
             a_open=menu.addAction("Открыть");a_edit=menu.addAction("Редактировать");a_edit.setEnabled(self.can(Permission.ORDERS_EDIT));a_history=menu.addAction("Посмотреть подробную историю")
         else:a_open=a_edit=a_history=None
         a_export=menu.addAction("Выгрузить в Excel");a_export.setEnabled(isinstance(ref,int) and self.can(Permission.ORDERS_EXPORT));a_delete=None
-        if not self.user.has_any_role(ACCOUNTING_ROLES):a_delete=menu.addAction("Удалить черновик");a_delete.setEnabled(isinstance(ref,str))
+        if self.can(Permission.ORDERS_HISTORY):a_delete=menu.addAction("Удалить черновик");a_delete.setEnabled(isinstance(ref,str))
         act=menu.exec_(self.orders_table.viewport().mapToGlobal(pos))
         if act==a_open:self._open_selected()
         elif act==a_edit:self.edit_order()
@@ -6131,7 +6109,7 @@ class RC18MainWindow(RC17MainWindow):
         # Recover history panel after extreme zoom/fullscreen re-layouts.
         try:
             if hasattr(self,"info_panel"):
-                self.info_panel.setVisible(not self.user.has_any_role(ACCOUNTING_ROLES))
+                self.info_panel.setVisible(self.can(Permission.ORDERS_HISTORY))
                 self.info_panel.updateGeometry()
             current=self.tabs.currentWidget()
             if current is not None:
@@ -6311,6 +6289,8 @@ class RC20WorkOrderDialog(RC18WorkOrderDialog):
         if hasattr(self, "order_number_label"):
             theme, _ = _theme_of(self.parent())
             self.order_number_label.setStyleSheet("background:transparent;border:none;padding:0;color:" + ("#FFFFFF" if theme == "dark" else "#202020") + ";font-weight:900;")
+        from .interaction_ui import align_order_footer
+        align_order_footer(self)
 
     def _export_current_order(self):
         if not self.user.can(Permission.ORDERS_EXPORT):return

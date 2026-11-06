@@ -218,13 +218,14 @@ class MainWindow(EnterpriseWindow):
         self._ensure_tab_widths();self._update_zoom_mode()
 
     def _ensure_tab_widths(self):
-        if not hasattr(self, "tabs"): return
-        bar = self.tabs.tabBar()
-        scale = self.ui_settings.zoom / 100
-        bar.setMinimumHeight(0)
-        css=f"QTabBar::tab{{min-width:{max(72,round(84*scale))}px;min-height:{max(28,round(30*scale))}px;padding-left:{round(20*scale)}px;padding-right:{round(20*scale)}px;font-size:{round(13*scale)}px;}}"
+        if not hasattr(self,"tabs"):return
+        from .appearance import font_for
+        import json
+        bar=self.tabs.tabBar();font=font_for("tabs",self.ui_settings.zoom,self.ui_settings.appearance)
+        scale=self.ui_settings.zoom/100
+        css=f'QTabBar{{font-family:{json.dumps(font.family())};font-size:{font.pixelSize()}px;font-weight:{round(font.weight()/10)*100};}}QTabBar::tab{{min-height:{max(30,font.pixelSize()+16)}px;padding:6px {round(22*scale)}px;}}'
         if bar.styleSheet()!=css:bar.setStyleSheet(css)
-        bar.setExpanding(False); bar.setElideMode(Qt.ElideNone)
+        bar.setExpanding(False);bar.setElideMode(Qt.ElideNone);bar.setUsesScrollButtons(True);bar.updateGeometry()
 
     def set_appearance(self, appearance):
         super().set_appearance(appearance)
@@ -271,8 +272,7 @@ class MainWindow(EnterpriseWindow):
         return "БД недоступна", str(message)
 
     def _orders_allowed(self):
-        return (self.tabs.isTabEnabled(0)
-                and not any(role in ANALYTICS_ONLY_ROLES for role in split_roles(self.user.role)))
+        return self.tabs.isTabEnabled(0) and self.can(Permission.ORDERS_VIEW)
 
     def glass_state(self):
         """Snapshot existing GUI models only; this method performs no DB reads."""
@@ -304,6 +304,8 @@ class MainWindow(EnterpriseWindow):
             "username": self.user.username, "role": " · ".join(tr(role) for role in split_roles(self.user.role)),
             "workshop": tr(WORKSHOPS[self.workshop]), "allowed": allowed,
             "workshopKey": self.workshop,
+            "topRestricted": self._orders_top_restricted(),
+            "canFilter":self.can(Permission.ORDERS_FILTER),
             "workshops": [{"value": key, "label": tr(label), "enabled": key in accessible}
                           for key, label in WORKSHOPS.items()],
             "tabs": [{"label": self.tabs.tabText(i).replace(" ⍰", ""),
@@ -315,7 +317,7 @@ class MainWindow(EnterpriseWindow):
             "rows": self._web_rows if allowed else [],
             "selected": row_key(ref) if ref is not None and allowed else None,
             "history": [self.info_users_list.item(i).text() for i in range(self.info_users_list.count())]
-                       if allowed else [],
+                       if allowed and self.can(Permission.ORDERS_HISTORY) else [],
             "busy": self._glass_busy,
             "status": status,
             "statusTip": self.orders_table.toolTip() or status_tip,

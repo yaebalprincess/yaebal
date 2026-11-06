@@ -30,8 +30,7 @@ class LiveDiagnosticsDialog(DiagnosticsCenterDialog):
 
 
 def notifications(manager,user):
-    manager.require(user,Permission.ORDERS_VIEW)
-    if not any(role in WORKSHOP_ROLES for role in split_roles(user.role)):return []
+    manager.require(user,Permission.NOTIFICATIONS_VIEW)
     result=[]
     for key in allowed_workshops(user):
         db=manager.database(key,user).backend
@@ -46,8 +45,7 @@ def notifications(manager,user):
 
 
 def unread_count(manager,user):
-    manager.require(user,Permission.ORDERS_VIEW)
-    if not any(role in WORKSHOP_ROLES for role in split_roles(user.role)):return 0
+    manager.require(user,Permission.NOTIFICATIONS_VIEW)
     count=0
     for key in allowed_workshops(user):
         db=manager.database(key,user).backend
@@ -58,6 +56,7 @@ def unread_count(manager,user):
 
 
 def mark_read(manager,user,key,ident=None):
+    manager.require(user,Permission.NOTIFICATIONS_VIEW)
     db=manager.database(key,user)
     params=[now_text(),user.id,user.username]
     query="UPDATE order_notifications SET read_at=? WHERE read_at IS NULL AND (owner_id=? OR (owner_id IS NULL AND owner_username=?))"
@@ -92,7 +91,7 @@ class NotificationPopup(QFrame):
             card=QFrame();card.setObjectName("NotificationCard");card.setStyleSheet("QFrame#NotificationCard{border:1px solid "+("#16B9B0" if not n["read_at"] else "#738097")+";border-radius:9px;padding:3px;}");l=QVBoxLayout(card)
             stamp=QLabel(("● " if not n["read_at"] else "")+WORKSHOPS[n["workshop_key"]]+" · "+n["created_at"]);stamp.setTextFormat(Qt.PlainText);stamp.setStyleSheet("font-size:10px;color:#16B9B0;border:0;");l.addWidget(stamp)
             text=QLabel(n["message"]);text.setTextFormat(Qt.PlainText);text.setWordWrap(True);text.setStyleSheet("border:0;");l.addWidget(text)
-            button=QPushButton("Посмотреть версию "+n["version"]);button.clicked.connect(lambda _,notice=n:self.open_notice(notice));l.addWidget(button);self.rows.addWidget(card)
+            button=QPushButton("Посмотреть версию "+n["version"]);button.setEnabled(int(n.get("id",0))<0 or self.owner.can(Permission.ORDERS_VIEW));button.clicked.connect(lambda _,notice=n:self.open_notice(notice));l.addWidget(button);self.rows.addWidget(card)
         self.rows.addStretch()
     def read_all(self):
         try:

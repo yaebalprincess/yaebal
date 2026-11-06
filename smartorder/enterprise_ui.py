@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QFrame, QHBoxLayout, QVBoxLa
 from . import heavy_ui
 from .heavy_ui import RC18MainWindow, _set_logo, _RC18SupportDialog
 from .config import APP_VERSION, network_root, resource_path, set_active_workshop, local_state_dir, local_drafts_dir
-from .security import Permission, ANALYTICS_ROLES, ANALYTICS_ONLY_ROLES, ACCOUNTING_ROLES, WORKSHOP_ROLES, split_roles
+from .security import ALL_PERMISSIONS, SessionUser, Permission, ANALYTICS_ROLES, ANALYTICS_ONLY_ROLES, ACCOUNTING_ROLES, WORKSHOP_ROLES, split_roles
 from .workshops import WorkshopManager, WorkshopDatabase, SessionTracker, WORKSHOPS, allowed_workshops
 from .analytics_ui import AnalyticsWidget
 from .symbols import symbol_icon, WORKSHOP_SYMBOLS
@@ -122,14 +122,14 @@ class TitleBar(QFrame):
         self.title.setObjectName("WindowTitleLabel")
         self.title.setMinimumWidth(80);self.title.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Preferred)
         self.title.setToolTip(self.title.text());row.addWidget(self.title,1);row.addStretch()
-        self.bell=QPushButton("🔔");self.bell.setObjectName("NotificationBell");self.bell.setToolTip("Уведомления об изменениях Ваших нарядов");self.bell.clicked.connect(owner.show_notifications);self.bell.setVisible(any(role in WORKSHOP_ROLES or role in ANALYTICS_ONLY_ROLES for role in split_roles(owner.user.role)));row.addWidget(self.bell)
+        self.bell=QPushButton("🔔");self.bell.setObjectName("NotificationBell");self.bell.setToolTip("Уведомления об изменениях Ваших нарядов");self.bell.clicked.connect(owner.show_notifications);self.bell.setVisible(owner.can(Permission.NOTIFICATIONS_VIEW));row.addWidget(self.bell)
         # Keep the theme switch beside the account/workshop badge, where it
         # remains reachable at every content zoom level.
         owner.theme_caption.setObjectName("TitleThemeCaption")
         row.addWidget(owner.theme_caption)
         row.addWidget(owner.theme)
         row.addSpacing(20)
-        self.badge=QPushButton(f"{owner.user.username}  ·  {tr(WORKSHOPS[owner.workshop])}  ▾");self.badge.setObjectName("UserWorkshopBadge");self.badge.setProperty("symbolIcon", "user");self.badge.setIcon(symbol_icon("user", owner.ui_settings.theme));self.badge.setToolTip(f"{owner.user.role}\nНажмите, чтобы выбрать цех");self.badge.clicked.connect(owner.choose_workshop);self.badge.setEnabled(not any(role in ANALYTICS_ONLY_ROLES for role in split_roles(owner.user.role)));row.addWidget(self.badge)
+        self.badge=QPushButton(f"{owner.user.username}  ·  {tr(WORKSHOPS[owner.workshop])}  ▾");self.badge.setObjectName("UserWorkshopBadge");self.badge.setProperty("symbolIcon", "user");self.badge.setIcon(symbol_icon("user", owner.ui_settings.theme));self.badge.setToolTip(f"{owner.user.role}\nНажмите, чтобы выбрать цех");self.badge.clicked.connect(owner.choose_workshop);self.badge.setEnabled(bool(allowed_workshops(owner.user)));row.addWidget(self.badge)
         row.addSpacing(8)
         self.controls=[]
         for kind,callback in [("min",owner.showMinimized),("max",self.toggle_max),("close",owner.close)]:
@@ -153,9 +153,7 @@ QToolButton#WindowClose:hover{{background:#e04e62;color:white;}}
             button.setFixedSize(38, 32)
             button.update()
     def toggle_max(self):
-        if self.owner.isFullScreen():self.owner.showNormal()
-        elif self.owner.isMaximized():self.owner.showNormal()
-        else:self.owner.showMaximized()
+        self.owner.toggle_window_mode(self.owner.isFullScreen())
     def mouseDoubleClickEvent(self,event):
         if event.button()==Qt.LeftButton:self.toggle_max()
     def mousePressEvent(self,event):
@@ -218,10 +216,16 @@ class MainWindow(RC18MainWindow):
             db=self.workshop_manager.database(key,user)
         self.workshop=key;set_active_workshop(key);self.session_tracker=tracker or SessionTracker(self.workshop_manager,user,key)
         self._initial_ui_settings = getattr(self.session_tracker, "ui_settings", None)
+        from .config import SettingsStore
+        from .profile_sync import load_shared_settings
+        local=self._initial_ui_settings or SettingsStore(user.id,user.username).load()
+        self._initial_ui_settings,self._profile_sync_status=load_shared_settings(self.workshop_manager.auth,user,local)
         self._switching=False;self._heartbeat_running=False;self.analytics=None
         self._notification_items=[];self._notification_count=0;self._notification_loading=False;self.notification_popup=None
         super().__init__(db,user)
         self.session_tracker.ui_settings = self.ui_settings
+        from .profile_sync import ProfileSync
+        self.profile_sync=ProfileSync(self)
         self._theme_clock = QTimer(self)
         self._theme_clock.setInterval(30000)
         self._theme_clock.timeout.connect(self._apply_scheduled_theme)
@@ -232,7 +236,7 @@ class MainWindow(RC18MainWindow):
         from .live_ui import _NotificationSignals
         self._notification_signals=_NotificationSignals(self);self._notification_signals.loaded.connect(self._notifications_loaded)
         self._notification_timer=QTimer(self);self._notification_timer.setInterval(3000);self._notification_timer.timeout.connect(self.refresh_notifications)
-        if any(role in WORKSHOP_ROLES or role in ANALYTICS_ONLY_ROLES for role in split_roles(user.role)):
+        if self.can(Permission.NOTIFICATIONS_VIEW):
             self._notification_timer.start();QTimer.singleShot(300,self.refresh_notifications)
         from .desktop_live import DesktopSignals
         self._live_signals=DesktopSignals(self)
@@ -274,19 +278,19 @@ class MainWindow(RC18MainWindow):
         getattr(self,'_apply_'+name)(data)
 
     def refresh_users(self):
-        if not hasattr(self,'users_table'):return
+        if not hasattr(self,'users_table') or not (self.can(Permission.USERS_VIEW) or self.can(Permission.USERS_MANAGE)):return
         db=self.db
         self._read_section('users',lambda:[tuple(r) for r in db.list_users()])
 
     def _apply_users(self,rows):
         if rows==getattr(self,'_visible_users',None):return
         self._visible_users=rows;self.users_table.setUpdatesEnabled(False);self.users_table.setRowCount(len(rows));self.users_table.setColumnWidth(3,430)
-        admin=self.user.has_role('Администратор')
+        admin=self.can(Permission.USERS_MANAGE)
         from .heavy_styles import set_theme_recursive
         try:
             for i,r in enumerate(rows):
                 uid,username,role,active=int(r[0]),str(r[1]),str(r[2]),bool(r[3])
-                self.users_table.setItem(i,0,heavy_ui.make_item(username,uid));self.users_table.setItem(i,1,heavy_ui.make_item(role));self.users_table.setItem(i,2,heavy_ui.make_item('Активен' if active else 'Отключён'))
+                self.users_table.setItem(i,0,heavy_ui.make_item(username,uid));self.users_table.setItem(i,1,heavy_ui.make_item(role));self.users_table.setItem(i,2,heavy_ui.make_item(('Активируется '+str(r[4]).replace('T',' ')) if len(r)>4 and r[4] else ('Активен' if active else 'Отключён')))
                 host=QWidget();h=QHBoxLayout(host);h.setContentsMargins(4,4,4,4);h.setSpacing(8)
                 edit=QPushButton('Изменить');edit.setObjectName('UserEditButton');delete=QPushButton('Удалить');delete.setObjectName('UserDeleteButton');toggle=QPushButton('Отключить' if active else 'Включить');toggle.setObjectName('UserToggleButton')
                 for button in (edit,delete,toggle):button.setEnabled(admin);h.addWidget(button)
@@ -301,7 +305,7 @@ class MainWindow(RC18MainWindow):
         if hasattr(self,'audit_table'):self.refresh_audit()
 
     def refresh_audit(self):
-        if not hasattr(self,'audit_table'):return
+        if not hasattr(self,'audit_table') or not self.can(Permission.AUDIT_VIEW):return
         start=self.audit_date_filter.startDate().toString('yyyy-MM-dd') if hasattr(self,'audit_date_filter') else None
         end=self.audit_date_filter.endDate().toString('yyyy-MM-dd') if hasattr(self,'audit_date_filter') else None
         user=self.audit_user_filter.currentData() if hasattr(self,'audit_user_filter') else None
@@ -324,7 +328,7 @@ class MainWindow(RC18MainWindow):
         finally:self.audit_table.setUpdatesEnabled(True)
 
     def refresh_backups(self):
-        if not hasattr(self,'backup_combo'):return
+        if not hasattr(self,'backup_combo') or not self.can(Permission.BACKUP_MANAGE):return
         from .desktop_live import drafts_folder
         folder=drafts_folder(self.workshop_manager.root,self.workshop).parent/'backups'/'manual'
         self._read_section('backups',lambda:[(p.name,str(p)) for p in sorted(folder.glob('*.db'),reverse=True)])
@@ -396,7 +400,7 @@ class MainWindow(RC18MainWindow):
         ref=self._selected_ref();draft=isinstance(ref,str) and ref.lower().endswith(".json")
         self.edit_order_btn.setEnabled(bool(ref) and self.can(Permission.ORDERS_EDIT))
         self.export_order_btn.setEnabled(isinstance(ref,int) and self.can(Permission.ORDERS_EXPORT))
-        self.delete_draft_btn.setEnabled(draft and not self.user.has_any_role(ACCOUNTING_ROLES))
+        self.delete_draft_btn.setEnabled(draft and self.can(Permission.ORDERS_DELETE_DRAFT))
         self._history_generation+=1;generation=self._history_generation;self.info_users_list.clear()
         if draft:self.info_users_list.addItem("Общий черновик");return
         if not isinstance(ref,int):return
@@ -510,16 +514,16 @@ class MainWindow(RC18MainWindow):
         # Existing lazy pages use indexes 0..3; new pages are built by this class.
         self.tabs.insertTab(4,QWidget(),"Аналитика")
         self.tabs.insertTab(5,QWidget(),"Персонализация")
-        for i,permission in [(0,Permission.ORDERS_VIEW),(1,Permission.CATALOG_VIEW),(2,Permission.EMPLOYEES_VIEW),(3,Permission.ADMIN_VIEW),(4,Permission.ANALYTICS_VIEW)]:self.tabs.setTabEnabled(i,self.can(permission) and (i!=4 or any(role in ANALYTICS_ROLES for role in split_roles(self.user.role))))
+        for i,permission in [(0,Permission.ORDERS_VIEW),(1,Permission.CATALOG_VIEW),(2,Permission.EMPLOYEES_VIEW),(3,Permission.ADMIN_VIEW),(4,Permission.ANALYTICS_VIEW)]:self.tabs.setTabEnabled(i,self.can(permission))
         self.tabs.setTabEnabled(5,True);self.tabs.setTabEnabled(6,True);self._tab_motion=TabMotion(self.tabs.tabBar())
         layout=self.centralWidget().layout();layout.setContentsMargins(0,0,0,0);self.titlebar=TitleBar(self);layout.insertWidget(0,self.titlebar)
         self.zoom_message=QLabel('Во вкладке "Аналитика" Функция масштаба недоступна');self.zoom_message.setWordWrap(True);self.zoom_message.hide();layout.insertWidget(2,self.zoom_message)
         grip_row=QHBoxLayout();grip_row.setContentsMargins(0,0,0,0);grip_row.addStretch();self.grip=QSizeGrip(self);grip_row.addWidget(self.grip);layout.addLayout(grip_row)
         self.tabs.setCurrentIndex(0)
         self._analytics_order_overlay=None
-        if any(role in ANALYTICS_ONLY_ROLES for role in split_roles(self.user.role)):
-            from .workspace_ui import ActionAccessOverlay
-            self._analytics_order_overlay=ActionAccessOverlay(self.create_order_btn.parentWidget())
+        from .interaction_ui import install_access_cursor
+        install_access_cursor()
+        self._update_permission_controls()
         self._enterprise_building=False
         self.zoom.sliderReleased.connect(self._rc18_commit_zoom)
 
@@ -618,18 +622,93 @@ class MainWindow(RC18MainWindow):
         if hasattr(self,"_schedule_glass_state"):self._schedule_glass_state()
 
     def _theme_toggled(self,checked):
-        if self.ui_settings.auto_theme and not getattr(self, "_scheduled_change", False):
-            self.ui_settings.auto_theme = False
+        if self.ui_settings.auto_theme and not getattr(self,"_scheduled_change",False):self.ui_settings.auto_theme=False
         self.ui_settings.theme="dark" if checked else "light"
-        self._apply_theme()
-        self.settings_store.save(self.ui_settings)
         self.theme_caption.setText(tr("Тёмная тема" if checked else "Светлая тема"))
-        self._apply_admin_filter_theme()
-        self.titlebar.set_theme(self.ui_settings.theme)
-        self._apply_native_titlebars()
-        if self.analytics and self.analytics.isVisible():self.analytics.set_theme(self.ui_settings.theme)
         self._sync_personalization_controls()
+        if not hasattr(self,"_theme_apply_timer"):
+            self._theme_apply_timer=QTimer(self);self._theme_apply_timer.setSingleShot(True);self._theme_apply_timer.timeout.connect(self._finish_theme_change)
+        self._theme_apply_timer.start(0)
+
+    def _finish_theme_change(self):
+        self._apply_theme();self.settings_store.save(self.ui_settings)
         self._update_zoom_mode()
+        if hasattr(self,"_schedule_glass_state"):self._schedule_glass_state()
+
+    def _apply_theme(self):
+        from .heavy_styles import apply_apple_design
+        apply_apple_design(self,self.ui_settings.theme,self.ui_settings.zoom)
+        if hasattr(self,"titlebar"):self.titlebar.set_theme(self.ui_settings.theme)
+        self._apply_admin_filter_theme();self._apply_native_titlebars()
+        if self.analytics is not None and self.analytics.isVisible():self.analytics.set_theme(self.ui_settings.theme)
+
+    def toggle_window_mode(self,fullscreen=True):
+        from .interaction_ui import WindowMotion
+        if not hasattr(self,"_window_motion"):self._window_motion=WindowMotion(self)
+        self._window_motion.toggle(fullscreen)
+
+    def keyPressEvent(self,event):
+        if event.key() in (Qt.Key_Escape,Qt.Key_F11):
+            if not event.isAutoRepeat():self.toggle_window_mode(True)
+            event.accept();return
+        super().keyPressEvent(event)
+
+    def _orders_top_restricted(self):
+        return not any(self.can(code) for code in (Permission.ORDERS_CREATE,Permission.ORDERS_EDIT,Permission.ORDERS_EXPORT,Permission.ORDERS_FILTER,Permission.ORDERS_HISTORY,Permission.ORDERS_DELETE_DRAFT))
+
+    def _update_permission_controls(self):
+        if not hasattr(self,"tabs"):return
+        from .interaction_ui import RestrictedArea
+        for index,permission in enumerate((Permission.ORDERS_VIEW,Permission.CATALOG_VIEW,Permission.EMPLOYEES_VIEW,Permission.ADMIN_VIEW,Permission.ANALYTICS_VIEW)):
+            self.tabs.setTabEnabled(index,self.can(permission))
+        if hasattr(self,"create_order_btn"):
+            self.create_order_btn.setEnabled(self.can(Permission.ORDERS_CREATE))
+            self.delete_draft_btn.setVisible(True);self.info_panel.setVisible(True)
+            for widget in (self.order_filter_date,self.order_filter_master,self.order_filter_shift,self.order_filter_dep):widget.setEnabled(self.can(Permission.ORDERS_FILTER))
+            self.info_panel.setProperty("accessDenied",not self.can(Permission.ORDERS_HISTORY));self.info_panel.setCursor(Qt.ArrowCursor if self.can(Permission.ORDERS_HISTORY) else Qt.ForbiddenCursor)
+            restricted=self._orders_top_restricted()
+            overlay=getattr(self,"_analytics_order_overlay",None)
+            if restricted and overlay is None:
+                overlay=RestrictedArea(self.tabs.widget(0),[self.order_filter_date,self.create_order_btn.parentWidget(),self.info_panel]);self._analytics_order_overlay=overlay
+            if overlay is not None:overlay.setVisible(restricted)
+        if hasattr(self,"titlebar"):
+            self.titlebar.bell.setVisible(self.can(Permission.NOTIFICATIONS_VIEW));self.titlebar.badge.setEnabled(True)
+        if hasattr(self,"users_table"):
+            for index in range(self.users_table.rowCount()):
+                cell=self.users_table.cellWidget(index,3)
+                if cell is not None:
+                    for button in cell.findChildren(QPushButton):button.setEnabled(self.can(Permission.USERS_MANAGE))
+
+    def add_user(self):
+        if not self.can(Permission.USERS_MANAGE):return
+        from .account_ui import AccountDialog
+        dialog=AccountDialog(parent=self)
+        if dialog.exec_()!=QDialog.Accepted:return
+        try:
+            self.db.add_user(self.user,dialog.username.text(),dialog.password.text(),dialog.selected_roles(),**dialog.account_options());self._visible_users=None;self.refresh_users()
+        except Exception as exc:QMessageBox.warning(self,tr("Пользователь"),str(exc))
+        finally:dialog.deleteLater()
+
+    def _edit_user_by_id(self,uid,username,role):
+        if not self.can(Permission.USERS_MANAGE):return
+        from .account_ui import AccountDialog
+        from .account_store import UNSET
+        dialog=AccountDialog(username,role,False,self,options=self.workshop_manager.auth.user_options(uid))
+        if dialog.exec_()!=QDialog.Accepted:return
+        try:
+            options=dialog.account_options()
+            if not self.can(Permission.PERMISSIONS_MANAGE):options["permissions"]=UNSET
+            self.db.update_user(self.user,uid,dialog.username.text(),dialog.selected_roles(),dialog.password.text(),**options)
+            if uid==self.user.id:
+                prior_store=self.settings_store
+                self.user=SessionUser(uid,dialog.username.text().strip(),dialog.selected_roles(),self.workshop_manager.auth.permissions_for_user(uid,dialog.selected_roles()))
+                from .config import SettingsStore
+                self.settings_store=SettingsStore(uid,self.user.username);self.settings_store.on_save=prior_store.on_save;self.settings_store.save(self.ui_settings)
+                self.db.user=self.user;self.session_tracker.user=self.user;self._update_permission_controls()
+                self.titlebar.badge.setText(f"{self.user.username}  ·  {tr(WORKSHOPS[self.workshop])}  ▾")
+            self._visible_users=None;self.refresh_users()
+        except Exception as exc:QMessageBox.warning(self,tr("Пользователь"),str(exc))
+        finally:dialog.deleteLater()
 
     def _sync_personalization_controls(self):
         panel = getattr(self, "appearance_panel", None)
@@ -641,11 +720,54 @@ class MainWindow(RC18MainWindow):
             control.setChecked(value); control.blockSignals(previous)
         panel.theme_label.setText(tr("Тёмная тема" if self.ui_settings.theme == "dark" else "Светлая тема"))
 
+    def set_config_sync(self,enabled):
+        if self.user.id<=0:return
+        self.ui_settings.sync_personalization=bool(enabled);self.settings_store.save(self.ui_settings)
+
+    def share_personalization(self):
+        from .profile_sync import export_current_config
+        try:
+            path=export_current_config(self.user,self.ui_settings)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent)))
+            if getattr(self,"appearance_panel",None) is not None:self.appearance_panel.sync_status.setText(tr("Конфиг сохранён: ")+path.name)
+            return path
+        except Exception as exc:QMessageBox.warning(self,tr("Персонализация"),str(exc))
+
+    def import_personalization(self):
+        from pathlib import Path
+        import json
+        from dataclasses import fields
+        from .config import UiSettings
+        from .profile_sync import read_config
+        from .i18n import set_language
+        from PyQt5.QtWidgets import QFileDialog
+        path,_=QFileDialog.getOpenFileName(self,tr("Загрузить конфиг…"),"","SmartOrder (*.json)")
+        if not path:return
+        try:
+            source=Path(path)
+            if source.stat().st_size>8*1024*1024:raise ValueError("Конфигурация слишком велика: максимум 8 МБ")
+            loaded=read_config(json.loads(source.read_text(encoding="utf-8")))
+            loaded.sync_personalization=self.ui_settings.sync_personalization
+            previous_about=self.ui_settings.about_theme
+            for field in fields(UiSettings):setattr(self.ui_settings,field.name,getattr(loaded,field.name))
+            set_language(loaded.language)
+            blocked=self.theme.blockSignals(True);self.theme.setChecked(loaded.theme=="dark");self.theme.blockSignals(blocked)
+            self.theme_caption.setText(tr("Тёмная тема" if loaded.theme=="dark" else "Светлая тема"))
+            self.set_appearance(loaded.appearance);self.set_language(loaded.language)
+            if 5 in self._loaded_tabs:self._replace_tab(5,self._build_personalization_tab(),"Персонализация")
+            if previous_about!=loaded.about_theme and 6 in self._loaded_tabs:self._replace_tab(6,self._build_about_tab(),"О приложении")
+            self._update_zoom_mode();self._apply_current_page_scale()
+            old=self.zoom.blockSignals(True);self.zoom.setValue(loaded.zoom);self.zoom.blockSignals(old);self.zoom_label.setText(str(loaded.zoom)+"%")
+            self.settings_store.save(self.ui_settings)
+            return loaded
+        except Exception as exc:QMessageBox.warning(self,tr("Персонализация"),str(exc))
+
     def set_remember_personalization(self, remember):
         self.settings_store.set_startup_enabled(self.ui_settings,remember)
 
     def set_language(self,code):
-        if code not in {"ru","en","es"}:return
+        from .i18n import LANGUAGES
+        if code not in LANGUAGES:return
         self.ui_settings.language=code
         from .i18n import set_language,apply_language
         set_language(code);apply_language(self,code)
@@ -654,7 +776,7 @@ class MainWindow(RC18MainWindow):
         for index in (1,2):
             if index in self._loaded_tabs:align_action_sizes(self.tabs.widget(index),self.ui_settings.appearance,self.ui_settings.zoom)
         for message in self.findChildren(EmptyTableMessage):message.refresh()
-        self._update_session_labels();self._update_zoom_mode();self.settings_store.save(self.ui_settings)
+        self._update_session_labels();self._update_zoom_mode();self._ensure_tab_widths();self.settings_store.save(self.ui_settings)
         if hasattr(self,"_schedule_glass_state"):self._schedule_glass_state()
 
     def set_auto_theme(self, enabled):
@@ -752,7 +874,10 @@ class MainWindow(RC18MainWindow):
             if widget is not None:widget._i18n_language=None;apply_widget(widget)
 
     def _build_admin_tab(self):
-        tab=super()._build_admin_tab()
+        actual=self.user
+        self.user=SessionUser(actual.id,actual.username,"Администратор",frozenset(ALL_PERMISSIONS))
+        try:tab=super()._build_admin_tab()
+        finally:self.user=actual
         content=tab.widget() if isinstance(tab,QScrollArea) else tab
         from PyQt5.QtWidgets import QGroupBox
         for group in content.findChildren(QGroupBox):
@@ -772,9 +897,22 @@ class MainWindow(RC18MainWindow):
                 self._admin_filter_labels.append(label)
         self._apply_admin_filter_theme()
         label=QLabel("Общие учётные записи и сессии: "+str(self.workshop_manager.auth.path));label.setWordWrap(True);label.setTextInteractionFlags(Qt.TextSelectableByMouse);content.layout().addWidget(label)
-        if self.user.has_role("Администратор"):
-            b=QPushButton("Резервная копия учётных записей и сессий");b.clicked.connect(self.backup_identity);content.layout().addWidget(b)
+        b=QPushButton("Резервная копия учётных записей и сессий");b.setObjectName("IdentityBackupButton");b.clicked.connect(self.backup_identity);b.setEnabled(self.can(Permission.IDENTITY_BACKUP));content.layout().addWidget(b)
+        self._apply_admin_permissions(content)
         return tab
+
+    def _apply_admin_permissions(self,content):
+        checks={"Добавить пользователя":Permission.USERS_MANAGE,"Разрешительный режим":Permission.USERS_MANAGE,"Создать бэкап":Permission.BACKUP_MANAGE,"Восстановить":Permission.BACKUP_RESTORE,"Удалить":Permission.BACKUP_DELETE,"Создать архивный снимок":Permission.BACKUP_MANAGE,"Открыть архивный снимок":Permission.BACKUP_MANAGE,"Создать лог":Permission.AUDIT_VIEW,"Центр диагностики":Permission.DIAGNOSTICS_VIEW,"Обновить патч":Permission.APP_UPDATE,"Синхронизировать":Permission.DATA_SYNC}
+        from PyQt5.QtWidgets import QAbstractButton,QGroupBox
+        for button in content.findChildren(QAbstractButton):
+            code=checks.get(button.text())
+            if code:button.setEnabled(self.can(code));button.setProperty("requiredPermission",code)
+        for name,code in (("access_control_check",Permission.USERS_MANAGE),("diagnostics_center_btn",Permission.DIAGNOSTICS_VIEW),("update_patch_btn",Permission.APP_UPDATE)):
+            widget=getattr(self,name,None)
+            if widget is not None:widget.setEnabled(self.can(code))
+        for name,code in (("users_table",Permission.USERS_VIEW),("audit_table",Permission.AUDIT_VIEW)):
+            widget=getattr(self,name,None)
+            if widget is not None:widget.setEnabled(self.can(code) or code==Permission.USERS_VIEW and self.can(Permission.USERS_MANAGE))
 
     def _apply_admin_filter_theme(self):
         labels=getattr(self,"_admin_filter_labels",())
@@ -799,7 +937,7 @@ class MainWindow(RC18MainWindow):
 
     def backup_identity(self):
         try:
-            self.workshop_manager.require(self.user,Permission.USERS_MANAGE)
+            self.workshop_manager.require(self.user,Permission.IDENTITY_BACKUP)
             folder=network_root()/"backups"/"identity";folder.mkdir(parents=True,exist_ok=True)
             target=folder/("identity_"+datetime.now().strftime("%Y-%m-%d_%H-%M-%S")+".db")
             self.workshop_manager.auth.backup_to(target)
@@ -807,17 +945,10 @@ class MainWindow(RC18MainWindow):
         except Exception as exc:QMessageBox.warning(self,"Резервная копия",str(exc))
 
     def choose_workshop(self):
-        if getattr(self,"workshop_menu",None) is not None and self.workshop_menu.isVisible():
-            self.workshop_menu.hide();return
-        menu=QMenu(self);self.workshop_menu=menu
-        dark=self.ui_settings.theme=="dark"
-        menu.setStyleSheet("QMenu{background:"+("#292C34;color:#FFFFFF;" if dark else "#FFFFFF;color:#202938;")+"border:1px solid #738097;border-radius:9px;padding:7px;font-size:14px;}QMenu::item{padding:10px 24px;border-radius:5px;}QMenu::item:selected{background:"+("#405575;" if dark else "#DDEAFB;")+"}QMenu::item:disabled{color:#858C99;}")
-        heading=menu.addAction(self.user.username+" · "+self.user.role);heading.setEnabled(False);menu.addSeparator()
-        group=QActionGroup(menu);group.setExclusive(True)
-        for key,name in WORKSHOPS.items():
-            action=menu.addAction(symbol_icon(WORKSHOP_SYMBOLS[key], self.ui_settings.theme), name);action.setCheckable(True);action.setChecked(key==self.workshop);action.setEnabled(key in allowed_workshops(self.user));action.setData(key);group.addAction(action)
-            action.triggered.connect(lambda checked=False,k=key:self._switch_to_workshop(k))
-        menu.popup(self.titlebar.badge.mapToGlobal(self.titlebar.badge.rect().bottomLeft()))
+        if getattr(self,"workshop_menu",None) is not None and self.workshop_menu.isVisible():self.workshop_menu.close();return
+        from .interaction_ui import WorkshopPopup
+        self.workshop_menu=WorkshopPopup(self)
+        self.workshop_menu.popup(self.titlebar.badge.mapToGlobal(self.titlebar.badge.rect().bottomLeft())+QPointF(0,4).toPoint())
 
     def _switch_to_workshop(self,key):
         if key==self.workshop or getattr(self,"_workshop_switching",False) or key not in allowed_workshops(self.user):return self
@@ -863,7 +994,7 @@ class MainWindow(RC18MainWindow):
         from .live_ui import notifications,unread_count
         def worker():
             try:
-                workshop_access=any(role in WORKSHOP_ROLES for role in split_roles(self.user.role))
+                workshop_access=self.can(Permission.NOTIFICATIONS_VIEW)
                 items=notifications(self.workshop_manager,self.user) if workshop_access else []
                 count=unread_count(self.workshop_manager,self.user) if workshop_access else 0
                 notice=read_update_announcement()
@@ -887,7 +1018,7 @@ class MainWindow(RC18MainWindow):
         if self.notification_popup and self.notification_popup.isVisible():self.notification_popup.render(items,error)
 
     def show_notifications(self):
-        if not any(role in WORKSHOP_ROLES or role in ANALYTICS_ONLY_ROLES for role in split_roles(self.user.role)):return
+        if not self.can(Permission.NOTIFICATIONS_VIEW):return
         from .live_ui import NotificationPopup
         if self.notification_popup is not None:self.notification_popup.close();self.notification_popup.deleteLater()
         self.notification_popup=NotificationPopup(self)
@@ -897,6 +1028,7 @@ class MainWindow(RC18MainWindow):
         self.notification_popup.move(x,y);self.notification_popup.show();self.refresh_notifications()
 
     def open_notification_order(self,notice):
+        self.workshop_manager.require(self.user,Permission.ORDERS_VIEW)
         window=self._switch_to_workshop(notice["workshop_key"])
         if window is None:return
         def show():

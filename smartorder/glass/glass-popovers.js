@@ -106,7 +106,7 @@
   function renderCalendar() {
     if (!calendar) return;
     const first = new Date(Date.UTC(calendar.year, calendar.month, 1));
-    $("calendar-month").textContent = first.toLocaleDateString(({ru:"ru-RU",en:"en-US",es:"es-ES"}[state.language]||"ru-RU"), {month: "long", year: "numeric", timeZone: "UTC"});
+    $("calendar-month").textContent = first.toLocaleDateString(({ru:"ru-RU",en:"en-US",es:"es-ES",kk:"kk-KZ",fr:"fr-FR",de:"de-DE",ja:"ja-JP",tt:"tt-RU"}[state.language]||"ru-RU"), {month: "long", year: "numeric", timeZone: "UTC"});
     $("calendar-hint").textContent = window.SmartOrderI18n(calendar.waiting ? "Выберите конец периода или нажмите «Применить»" : "Выберите дату или начало периода");
     $("calendar-period").textContent = calendar.start === calendar.end ? displayDate(calendar.start) : displayDate(calendar.start) + " — " + displayDate(calendar.end);
     const monday = new Date(first); monday.setUTCDate(1 - ((first.getUTCDay() + 6) % 7));
@@ -120,7 +120,7 @@
       button.classList.toggle("in-range", value > calendar.start && value < calendar.end);
       button.classList.toggle("range-edge", value === calendar.start || value === calendar.end);
       button.classList.toggle("today", value === state.filters.today);
-      button.setAttribute("aria-label", day.toLocaleDateString(({ru:"ru-RU",en:"en-US",es:"es-ES"}[state.language]||"ru-RU"), {day: "numeric", month: "long", year: "numeric", timeZone: "UTC"}));
+      button.setAttribute("aria-label", day.toLocaleDateString(({ru:"ru-RU",en:"en-US",es:"es-ES",kk:"kk-KZ",fr:"fr-FR",de:"de-DE",ja:"ja-JP",tt:"tt-RU"}[state.language]||"ru-RU"), {day: "numeric", month: "long", year: "numeric", timeZone: "UTC"}));
       button.setAttribute("aria-pressed", value >= calendar.start && value <= calendar.end ? "true" : "false");
       fragment.appendChild(button);
     }

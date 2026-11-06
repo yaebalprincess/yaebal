@@ -1,7 +1,7 @@
 """UI translations; database values, names and typed text are never translated."""
 from PyQt5.QtCore import Qt, QLocale
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QAbstractButton, QComboBox, QGroupBox, QLineEdit, QTabWidget, QListWidget, QTableWidget
-LANGUAGES = {"ru":"Русский", "en":"English", "es":"Español"}
+LANGUAGES = {"ru":"Русский", "en":"English", "es":"Español", "kk":"Қазақша", "fr":"Français", "de":"Deutsch", "ja":"日本語", "tt":"Татарча"}
 SOURCE_ROLE = int(Qt.UserRole)+901
 _TEXT = '''Наряд|Work order|Orden de trabajo
 Наряды|Work orders|Órdenes de trabajo
@@ -278,7 +278,15 @@ Smart Order · Создание нового пользователя|Smart Orde
 По месяцам|By month|Por mes
 По годам|By year|Por año'''
 CATALOG={r.split('|')[0]:tuple(r.split('|')[1:]) for r in _TEXT.splitlines()}
-REVERSE={v:k for k,values in CATALOG.items() for v in values}
+from .locales_v7 import EXTRA,BASE_NEW
+CATALOG.update(BASE_NEW);CATALOG.pop("Аналитик",None)
+TRANSLATIONS={"en":{k:v[0] for k,v in CATALOG.items()},"es":{k:v[1] for k,v in CATALOG.items()},**EXTRA}
+from .security import PERMISSION_LABELS
+for label in PERMISSION_LABELS.values():
+    head,tail=label.split(": ",1)
+    for translations in TRANSLATIONS.values():translations[label]=translations.get(head,head)+": "+translations.get(tail,tail)
+    CATALOG[label]=(TRANSLATIONS["en"][label],TRANSLATIONS["es"][label])
+REVERSE={value:key for translations in TRANSLATIONS.values() for key,value in translations.items()}
 
 def language():
     return getattr(QApplication.instance(),"_smartorder_language","ru")
@@ -289,10 +297,11 @@ def set_language(code):
 def tr(text,code=None):
     code=code or language()
     if code=="ru":return text
-    if text in CATALOG:return CATALOG[text][0 if code=="en" else 1]
-    for prefix in ("Текущая сессия:","Найдено:","Недавно удалено:"):
-        if text.startswith(prefix):return tr(prefix,code)+text[len(prefix):]
-    return text
+    translations=TRANSLATIONS.get(code,TRANSLATIONS["en"])
+    if text in translations:return translations[text]
+    for prefix in ("Текущая сессия:","Найдено:","Недавно удалено:","Не удалось синхронизировать персонализацию: ","Конфиг сохранён: "):
+        if text.startswith(prefix):return tr(prefix,code)+text[len(prefix):] if text!=prefix else translations.get(prefix,prefix)
+    return TRANSLATIONS["en"].get(text,text)
 
 def item_source(combo,index):
     return combo.itemData(index,SOURCE_ROLE) or combo.itemText(index)
@@ -304,7 +313,7 @@ def field(widget,key,value,setter,code):
     sources=getattr(widget,"_i18n_sources",None)
     if sources is None:sources={};widget._i18n_sources=sources
     original=sources.get(key)
-    if original is None or value not in (original,tr(original,"en"),tr(original,"es")):
+    if original is None or value not in tuple([original]+[tr(original,c) for c in LANGUAGES if c!="ru"]):
         original=REVERSE.get(value,value);sources[key]=original
     result=tr(original,code)
     if result!=value:setter(result)
@@ -335,7 +344,7 @@ def apply_widget(w,code=None):
             item=w.horizontalHeaderItem(i)
             if item:field(w,"header"+str(i),item.text(),item.setText,code)
     if hasattr(w,"report_model"):w.report_model.headerDataChanged.emit(Qt.Horizontal,0,max(0,len(w.report_model.columns)-1))
-    locale=QLocale({"ru":"ru_RU","en":"en_US","es":"es_ES"}[code])
+    locale=QLocale({"ru":"ru_RU","en":"en_US","es":"es_ES","kk":"kk_KZ","fr":"fr_FR","de":"de_DE","ja":"ja_JP","tt":"tt_RU"}[code])
     if w.locale()!=locale:w.setLocale(locale)
     w._i18n_language=code
 
