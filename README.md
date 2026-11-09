@@ -1,3 +1,14 @@
+# Smart Order · Liquid Glass v8
+
+- [Скачать SmartOrder v8 — ZIP исходников](https://github.com/yaebalprincess/yaebal/archive/refs/heads/smartorder-liquid-glass-v8.zip)
+- [Исходники, запуск и изменения](https://github.com/yaebalprincess/yaebal/tree/smartorder-liquid-glass-v8)
+
+Значок пустого списка нарядов по центру, затухающие подсказки полноэкранного и оконного режимов, плавные переходы между вкладками и круговое раскрытие темы. Кнопки справочников при первом открытии остаются внутри вкладок.
+
+В ZIP исходники, инструкция запуска и скрипты сборки Windows.
+
+---
+
 # Smart Order · Liquid Glass v7
 
 - [Скачать SmartOrder v7 — ZIP исходников](https://github.com/yaebalprincess/yaebal/archive/refs/heads/smartorder-liquid-glass-v7.zip)
