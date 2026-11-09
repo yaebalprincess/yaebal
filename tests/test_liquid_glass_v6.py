@@ -2,9 +2,9 @@
 from datetime import datetime
 import json
 import pytest
-from PyQt5.QtCore import QEvent, QPoint, Qt
+from PyQt5.QtCore import QEvent, QObject, QPoint, Qt
 from PyQt5.QtGui import QColor, QImage
-from PyQt5.QtWidgets import QApplication, QLabel, QPushButton
+from PyQt5.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 from smartorder.config import SettingsStore, UiSettings
 from smartorder.appearance_config import normalize_appearance
 from smartorder.heavy_ui import AnimatedToggle, UserDialog
@@ -53,13 +53,27 @@ def test_zoom_is_local_and_not_applied_while_dragging(glass,app,monkeypatch):
 def test_tabs_no_new_windows_and_reference_actions_align(glass,app):
     window,_,_=glass
     known={id(w) for w in app.topLevelWidgets() if w.isVisible()}
+    shown = []
+
+    class WindowShows(QObject):
+        def eventFilter(self, obj, event):
+            if (event.type() == QEvent.Show and isinstance(obj, QWidget)
+                    and obj.isWindow() and id(obj) not in known):
+                shown.append((obj.metaObject().className(), obj.objectName()))
+            return False
+
+    observer = WindowShows()
+    app.installEventFilter(observer)
     positions=[]
-    for index in (1,2,3,4,5,6,1,2,0):
-        window.tabs.setCurrentIndex(index);app.processEvents()
-        assert all(not w.isVisible() or id(w) in known for w in app.topLevelWidgets())
-        if index in (1,2):
-            buttons={b.property("alignedAction"):b for b in window.tabs.currentWidget().findChildren(QPushButton) if b.property("alignedAction")}
-            positions.append(tuple((kind,buttons[kind].mapTo(window,QPoint()),buttons[kind].size()) for kind in ("add","import")))
+    try:
+        for index in (1,2,3,4,5,6,1,2,0):
+            window.tabs.setCurrentIndex(index);app.processEvents()
+            if index in (1,2):
+                buttons={b.property("alignedAction"):b for b in window.tabs.currentWidget().findChildren(QPushButton) if b.property("alignedAction")}
+                positions.append(tuple((kind,buttons[kind].mapTo(window,QPoint()),buttons[kind].size()) for kind in ("add","import")))
+    finally:
+        app.removeEventFilter(observer)
+    assert not shown
     assert all(p==positions[0] for p in positions)
 
 
@@ -67,6 +81,20 @@ def test_empty_states_and_about_bottom(glass,app):
     window,_,_=glass
     assert javascript(app,window,'document.getElementById("empty-orders").hidden') is False
     assert "создайте наряд" in javascript(app,window,'document.getElementById("empty-orders").textContent')
+    for width, height in ((1727, 910), (900, 560), (640, 440)):
+        window.resize(width, height)
+        app.processEvents()
+        horizontal, vertical = javascript(app, window, '''(() => {
+            const bounds = selector => document.querySelector(selector).getBoundingClientRect();
+            const panel = bounds('#table-panel');
+            const header = bounds('#orders-table thead');
+            const icon = bounds('#empty-orders img');
+            const label = bounds('#empty-message');
+            return [Math.abs(icon.left + icon.right - panel.left - panel.right) / 2,
+                    Math.abs(icon.top + label.bottom - header.bottom - panel.bottom) / 2];
+        })()''')
+        assert horizontal < 2 and vertical < 2
+    window.resize(1727, 910)
     for index,name in [(1,"work_empty"),(2,"people_empty")]:
         window.tabs.setCurrentIndex(index);app.processEvents()
         empty=getattr(window,name)

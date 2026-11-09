@@ -867,7 +867,18 @@ class HeavyMainWindow(BaseMainWindow):
     def _build_catalog_tab(self):
         tab=QWidget(); layout=QVBoxLayout(tab); layout.setContentsMargins(10,8,10,8); layout.setSpacing(10)
         form=QHBoxLayout(); form.addWidget(QLabel("Наименование:")); self.work_name=QLineEdit(); self.work_name.setMinimumWidth(300); form.addWidget(self.work_name); form.addWidget(QLabel("Код работы:")); self.work_code=QLineEdit(); self.work_code.setMinimumWidth(150); form.addWidget(self.work_code); form.addWidget(QLabel("Стоимость:")); self.work_price=QLineEdit(); self.work_price.setMinimumWidth(130); form.addWidget(self.work_price)
-        add=QPushButton("Добавить"); add.setObjectName("PrimaryButton"); add.clicked.connect(self.add_work_type); add.setVisible(self.can(Permission.CATALOG_CREATE)); form.addWidget(add); imp=QPushButton("Загрузить из Excel"); imp.clicked.connect(self.import_work_types); imp.setVisible(self.can(Permission.CATALOG_IMPORT)); form.addWidget(imp); layout.addLayout(form)
+        # setVisible(True) must only run on children of the page. A button in
+        # an unattached layout would otherwise open as a separate window.
+        add = QPushButton("Добавить", tab)
+        add.setObjectName("PrimaryButton")
+        add.clicked.connect(self.add_work_type)
+        add.setVisible(self.can(Permission.CATALOG_CREATE))
+        form.addWidget(add)
+        imp = QPushButton("Загрузить из Excel", tab)
+        imp.clicked.connect(self.import_work_types)
+        imp.setVisible(self.can(Permission.CATALOG_IMPORT))
+        form.addWidget(imp)
+        layout.addLayout(form)
         search=QHBoxLayout(); search.addWidget(QLabel("Поиск:")); self.work_search=QLineEdit(); self.work_search.setPlaceholderText("Введите название или код работы"); self.work_search.textChanged.connect(self.refresh_work_types); search.addWidget(self.work_search); self.work_results_label=QLabel(); self.work_results_label.setObjectName("MutedLabel"); search.addWidget(self.work_results_label); search.addStretch(); layout.addLayout(search)
         self.work_table=QTableWidget(0,4); self.work_table.setHorizontalHeaderLabels(["Наименование","Код работы","Стоимость в рублях","Дата регистрации"]); self.work_table.setSelectionBehavior(QAbstractItemView.SelectRows); self.work_table.setSelectionMode(QAbstractItemView.SingleSelection); self.work_table.setEditTriggers(QAbstractItemView.NoEditTriggers); self.work_table.itemSelectionChanged.connect(self._heavy_work_selection); self.work_table.verticalHeader().setDefaultSectionSize(44); self.work_table.horizontalHeader().setFixedHeight(50); self.work_table.horizontalHeader().setSectionResizeMode(0,QHeaderView.Stretch); self.work_table.setColumnWidth(1,150); self.work_table.setColumnWidth(2,150); self.work_table.setColumnWidth(3,170); layout.addWidget(self.work_table,1); self.work_top=ScrollToTopButton(self.work_table)
         bottom=QHBoxLayout(); self.work_edit_btn=QPushButton("Редактировать"); self.work_edit_btn.setEnabled(False); self.work_edit_btn.clicked.connect(lambda:(self.work_name.setFocus(),self.work_save_btn.setEnabled(True))); bottom.addWidget(self.work_edit_btn); self.work_save_btn=QPushButton("Сохранить"); self.work_save_btn.setEnabled(False); self.work_save_btn.clicked.connect(self.edit_work_type); bottom.addWidget(self.work_save_btn); self.work_delete_btn=QPushButton("Удалить"); self.work_delete_btn.setObjectName("DangerButton"); self.work_delete_btn.setEnabled(False); self.work_delete_btn.clicked.connect(self.delete_work_type); bottom.addWidget(self.work_delete_btn); bottom.addStretch(); layout.addLayout(bottom)
@@ -905,7 +916,22 @@ class HeavyMainWindow(BaseMainWindow):
         modes=QHBoxLayout(); self.mode_worker=QRadioButton("Работники"); self.mode_master=QRadioButton("Мастера"); self.mode_department=QRadioButton("Подразделения"); self.mode_worker.setChecked(True)
         for b in (self.mode_worker,self.mode_master,self.mode_department):b.toggled.connect(self.refresh_people);modes.addWidget(b)
         modes.addStretch();layout.addLayout(modes)
-        form=QHBoxLayout(); self.person_form_label=QLabel("ФИО:"); form.addWidget(self.person_form_label); self.person_name=QLineEdit(); form.addWidget(self.person_name); add=QPushButton("Добавить"); add.setObjectName("PrimaryButton"); add.clicked.connect(self.add_person); add.setVisible(self.can(Permission.EMPLOYEES_CREATE)); form.addWidget(add); imp=QPushButton("Загрузить из Excel"); imp.clicked.connect(self.import_people); imp.setVisible(self.can(Permission.EMPLOYEES_IMPORT)); form.addWidget(imp); form.addStretch();layout.addLayout(form)
+        form = QHBoxLayout()
+        self.person_form_label = QLabel("ФИО:")
+        form.addWidget(self.person_form_label)
+        self.person_name = QLineEdit()
+        form.addWidget(self.person_name)
+        add = QPushButton("Добавить", tab)
+        add.setObjectName("PrimaryButton")
+        add.clicked.connect(self.add_person)
+        add.setVisible(self.can(Permission.EMPLOYEES_CREATE))
+        form.addWidget(add)
+        imp = QPushButton("Загрузить из Excel", tab)
+        imp.clicked.connect(self.import_people)
+        imp.setVisible(self.can(Permission.EMPLOYEES_IMPORT))
+        form.addWidget(imp)
+        form.addStretch()
+        layout.addLayout(form)
         search=QHBoxLayout(); search.addWidget(QLabel("Поиск:")); self.person_search=QLineEdit(); self.person_search.setPlaceholderText("Введите ФИО"); self.person_search.textChanged.connect(self.refresh_people); search.addWidget(self.person_search); self.people_results_label=QLabel("Найдено: 0"); self.people_results_label.setObjectName("MutedLabel"); search.addWidget(self.people_results_label); search.addStretch();layout.addLayout(search)
         self.people_table=QTableWidget(0,3); self.people_table.setHorizontalHeaderLabels(["ФИО / Название","Дата регистрации","Дата редактирования"]); self.people_table.setSelectionBehavior(QAbstractItemView.SelectRows); self.people_table.setSelectionMode(QAbstractItemView.SingleSelection); self.people_table.setEditTriggers(QAbstractItemView.NoEditTriggers); self.people_table.itemSelectionChanged.connect(self._heavy_people_selection); self.people_table.horizontalHeader().setFixedHeight(50); self.people_table.horizontalHeader().setSectionResizeMode(0,QHeaderView.Stretch); self.people_table.setColumnWidth(1,220); self.people_table.setColumnWidth(2,220); self.people_table.verticalHeader().setDefaultSectionSize(44);layout.addWidget(self.people_table,1);self.people_top=ScrollToTopButton(self.people_table)
         bottom=QHBoxLayout(); self.person_save_btn=QPushButton("Сохранить"); self.person_save_btn.setEnabled(False); self.person_save_btn.clicked.connect(self.edit_person); bottom.addWidget(self.person_save_btn); self.person_edit_btn=QPushButton("Редактировать"); self.person_edit_btn.setEnabled(False); self.person_edit_btn.clicked.connect(lambda:(self.person_name.setFocus(),self.person_save_btn.setEnabled(True))); bottom.addWidget(self.person_edit_btn); self.person_delete_btn=QPushButton("Удалить"); self.person_delete_btn.setObjectName("DangerButton"); self.person_delete_btn.setEnabled(False); self.person_delete_btn.clicked.connect(self.delete_person); bottom.addWidget(self.person_delete_btn); bottom.addStretch();layout.addLayout(bottom)
@@ -2259,11 +2285,20 @@ class _RC4FullscreenFeedback(QFrame):
         self.fade_out.setEasingCurve(QEasingCurve.InOutCubic)
         self.fade_out.finished.connect(self.deleteLater)
         self.fade_in.finished.connect(lambda: QTimer.singleShot(850, self.fade_out.start))
+        parent.installEventFilter(self)
 
-    def start(self):
+    def _center(self):
         parent = self.parentWidget()
         if parent is not None:
-            self.move(max(0, (parent.width()-self.width())//2), max(0, (parent.height()-self.height())//2))
+            self.move(parent.rect().center() - self.rect().center())
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Resize and self.isVisible():
+            self._center()
+        return False
+
+    def start(self):
+        self._center()
         self.show(); self.raise_(); self.fade_in.start()
 
 

@@ -116,35 +116,90 @@ def prepare_combo_popup(combo):
 
 
 class WindowMotion(QObject):
-    def __init__(self,window):
-        super().__init__(window);self.window=window;self.animation=None
-    def toggle(self,fullscreen=True):
-        if self.animation is not None and self.animation.state()==QPropertyAnimation.Running:return
-        window=self.window;screen=window.screen() or QApplication.primaryScreen()
-        entering=not (window.isFullScreen() if fullscreen else window.isMaximized())
-        if fullscreen and entering:
-            self.full_restore_rect=QRect(window.geometry());self.full_restore_maximized=window.isMaximized()
-        elif not fullscreen and entering:self.normal_restore_rect=QRect(window.geometry())
-        current=QRect(window.geometry())
-        if entering:target=screen.geometry() if fullscreen else screen.availableGeometry()
-        elif fullscreen:target=screen.availableGeometry() if getattr(self,"full_restore_maximized",False) else getattr(self,"full_restore_rect",window.normalGeometry())
-        else:target=getattr(self,"normal_restore_rect",window.normalGeometry())
+    def __init__(self, window):
+        super().__init__(window)
+        self.window = window
+        self.animation = None
+
+    def toggle(self, fullscreen=True):
+        if self.animation is not None:
+            return
+        from .liquid_effects import transition_to
+
+        window = self.window
+        screen = window.screen() or QApplication.primaryScreen()
+        current = QRect(window.geometry())
+        normal = QRect(window.normalGeometry())
+        if not normal.isValid():
+            normal = current
+        if fullscreen and window.isFullScreen():
+            mode = getattr(self, "before_fullscreen_mode", Qt.WindowNoState)
+            target = getattr(self, "before_fullscreen_rect", normal)
+        elif fullscreen:
+            self.before_fullscreen_mode = Qt.WindowMaximized if window.isMaximized() else Qt.WindowNoState
+            self.before_fullscreen_rect = current
+            self.normal_rect = getattr(self, "normal_rect", normal) if window.isMaximized() else current
+            mode, target = Qt.WindowFullScreen, screen.geometry()
+        elif window.isMaximized():
+            mode, target = Qt.WindowNoState, getattr(self, "normal_rect", normal)
+        else:
+            self.normal_rect = current
+            mode, target = Qt.WindowMaximized, screen.availableGeometry()
+
+        feedback = getattr(window, "_fullscreen_feedback", None)
+        if feedback is not None:
+            feedback.hide()
+        frame = transition_to(window, window.grab(), hold=True)
+        layout, shell = window.layout(), window.centralWidget()
+        if frame is not None:
+            # Resize the displayed frame; the web renderer, charts and tables
+            # get a single layout pass at the destination size.
+            frame.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+            layout.setEnabled(False)
+            shell.setUpdatesEnabled(False)
+
+        animation = QPropertyAnimation(window, b"geometry", self)
+        self.animation = animation
+        animation.setDuration(270)
+        animation.setEasingCurve(QEasingCurve.InOutCubic)
+        animation.setStartValue(current)
+        animation.setEndValue(target)
         window.setUpdatesEnabled(False)
         try:
-            if window.isFullScreen() or window.isMaximized():window.showNormal()
+            if window.isFullScreen() or window.isMaximized():
+                window.setWindowState(Qt.WindowNoState)
             window.setGeometry(current)
-        finally:window.setUpdatesEnabled(True)
-        animation=QPropertyAnimation(window,b"geometry",self);self.animation=animation
-        animation.setDuration(165);animation.setEasingCurve(QEasingCurve.OutCubic);animation.setStartValue(current);animation.setEndValue(target)
+        finally:
+            window.setUpdatesEnabled(True)
+
         def finish():
-            if fullscreen and entering:window.showFullScreen()
-            elif entering or fullscreen and getattr(self,"full_restore_maximized",False):window.showMaximized()
-            else:window.showNormal()
-            window.fullscreen_hint_label.setText(tr("Esc — выйти из полноэкранного режима" if window.isFullScreen() else "Esc — для полноэкранного режима"))
+            window.setUpdatesEnabled(False)
+            try:
+                # The animation is already at the destination. Returning to
+                # the saved normal rectangle here would add a resize between
+                # the last animation frame and the native mode change.
+                window.setWindowState(mode)
+                if frame is not None:
+                    layout.setEnabled(True)
+                    layout.invalidate()
+                    layout.setGeometry(window.contentsRect())
+                    shell.setUpdatesEnabled(True)
+            finally:
+                window.setUpdatesEnabled(True)
+            hint = "Esc — выйти из полноэкранного режима" if window.isFullScreen() else "Esc — для полноэкранного режима"
+            window.fullscreen_hint_label.setText(tr(hint))
             window._apply_native_titlebars()
-            if hasattr(window,"_schedule_glass_state"):window._schedule_glass_state()
-            self.animation=None;animation.deleteLater()
-        animation.finished.connect(finish);animation.start()
+            self.animation = None
+            animation.deleteLater()
+            if hasattr(window, "_schedule_glass_state"):
+                window._schedule_glass_state()
+            if frame is not None:
+                frame.fade(.16)
+            if fullscreen:
+                window._show_fullscreen_feedback(window.isFullScreen())
+
+        animation.finished.connect(finish)
+        animation.start()
 
 
 def align_order_footer(dialog):

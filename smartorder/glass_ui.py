@@ -141,6 +141,7 @@ class MainWindow(EnterpriseWindow):
         self._web_rows = []
         self._web_row_indices = {}
         self._glass_error = False
+        self._tab_frame = None
         super().__init__(db, user, manager, tracker)
         self._legacy_shell = self.centralWidget()
         self._legacy_shell.setObjectName("LiquidNativeShell")
@@ -157,6 +158,7 @@ class MainWindow(EnterpriseWindow):
         self.tabs.setCurrentIndex(current)
         self.tabs.blockSignals(False)
         self._unify_shell()
+        self.tabs.tabBarClicked.connect(self._capture_tab_frame)
         self._glass_push_timer = QTimer(self)
         self._glass_push_timer.setSingleShot(True)
         self._glass_push_timer.setInterval(25)
@@ -464,6 +466,7 @@ class MainWindow(EnterpriseWindow):
         elif action == "tab":
             index = data.get("index")
             if type(index) is int and 0 <= index < self.tabs.count() and self.tabs.isTabEnabled(index):
+                self._capture_tab_frame(index)
                 self.tabs.setCurrentIndex(index)
         elif action == "columns":
             from .config import normalize_order_columns
@@ -498,8 +501,26 @@ class MainWindow(EnterpriseWindow):
         elif action == "resize" and self.windowHandle() is not None:
             self.windowHandle().startSystemResize(Qt.RightEdge | Qt.BottomEdge)
 
+    def _capture_tab_frame(self, index):
+        self._tab_frame = None
+        page = self.tabs.currentWidget()
+        motion = getattr(self, "_window_motion", None)
+        if (index >= 0 and index != self.tabs.currentIndex() and self.tabs.isTabEnabled(index)
+                and page is not None and page.isVisible()
+                and (motion is None or motion.animation is None)):
+            self._tab_frame = (index, page.grab())
+
     def _tab_changed(self, index):
-        super()._tab_changed(index)
+        frame, self._tab_frame = self._tab_frame, None
+        effect = None
+        if frame is not None and frame[0] == index:
+            from .liquid_effects import transition_to
+            effect = transition_to(self.tabs.widget(index), frame[1], hold=True)
+        try:
+            super()._tab_changed(index)
+        finally:
+            if effect is not None:
+                effect.fade()
         if self._glass is not None:
             self._schedule_glass_state()
 
@@ -507,17 +528,19 @@ class MainWindow(EnterpriseWindow):
         super()._show_fullscreen_feedback(entering)
         feedback = getattr(self, "_fullscreen_feedback", None)
         if feedback is not None:
+            from .liquid_style import colors
+            palette = colors(self.ui_settings.theme == "dark")
             feedback.setStyleSheet(
                 "QFrame#FullscreenFeedback{background:transparent;"
-                "border:1px solid #C3DDF5;border-radius:20px;}"
-                "QLabel#FullscreenFeedbackText{color:#15395D;background:transparent;"
+                f"border:1px solid {palette['line']};border-radius:20px;}}"
+                f"QLabel#FullscreenFeedbackText{{color:{palette['ink']};background:transparent;"
                 "font-size:18px;font-weight:700;}"
-                "QLabel#FullscreenFeedbackHint{color:#55748F;background:transparent;"
+                f"QLabel#FullscreenFeedbackHint{{color:{palette['muted']};background:transparent;"
                 "font-size:12px;}"
             )
             from .heavy_ui import _RC4FullscreenIcon
             for icon in feedback.findChildren(_RC4FullscreenIcon):
-                icon.setProperty("iconColor", "#007AFF")
+                icon.setProperty("iconColor", palette["blue"].upper())
                 icon.update()
 
     def choose_workshop(self):
@@ -532,7 +555,8 @@ class MainWindow(EnterpriseWindow):
 
     def changeEvent(self, event):
         super().changeEvent(event)
-        if event.type() == QEvent.WindowStateChange:
+        motion = getattr(self, "_window_motion", None)
+        if event.type() == QEvent.WindowStateChange and (motion is None or motion.animation is None):
             self._schedule_glass_state()
 
     def closeEvent(self, event):

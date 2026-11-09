@@ -665,8 +665,20 @@ class MainWindow(RC18MainWindow):
         if hasattr(self,"_schedule_glass_state"):self._schedule_glass_state()
 
     def _theme_toggled(self,checked):
+        theme = "dark" if checked else "light"
+        motion = getattr(self, "_window_motion", None)
+        if (theme != self.ui_settings.theme and self.isVisible()
+                and not getattr(self, "_scheduled_change", False)
+                and (motion is None or motion.animation is None)):
+            toggle = self.theme
+            panel = getattr(self, "appearance_panel", None)
+            if not toggle.isVisible() and panel is not None:
+                toggle = panel.theme_toggle
+            if toggle.isVisible():
+                shell = self.centralWidget()
+                self._theme_frame = (shell.grab(), toggle.mapTo(shell, toggle.rect().center()))
         if self.ui_settings.auto_theme and not getattr(self,"_scheduled_change",False):self.ui_settings.auto_theme=False
-        self.ui_settings.theme="dark" if checked else "light"
+        self.ui_settings.theme = theme
         self.theme_caption.setText(tr("Тёмная тема" if checked else "Светлая тема"))
         self._sync_personalization_controls()
         if not hasattr(self,"_theme_apply_timer"):
@@ -674,9 +686,22 @@ class MainWindow(RC18MainWindow):
         self._theme_apply_timer.start(0)
 
     def _finish_theme_change(self):
+        frame = getattr(self, "_theme_frame", None)
+        self._theme_frame = None
         self._apply_theme();self.settings_store.save(self.ui_settings)
         self._update_zoom_mode()
         if hasattr(self,"_schedule_glass_state"):self._schedule_glass_state()
+        if frame is not None:
+            from .liquid_effects import transition_to
+            snapshot, origin = frame
+            effect = transition_to(self.centralWidget(), snapshot, origin=origin, hold=True)
+            if effect is not None:
+                web = getattr(self, "_glass", None)
+                web_visible = web is not None and web.isVisible() and self._glass_ready
+                if web_visible:
+                    self._publish_glass_state()
+                # Let Chromium receive the new palette before revealing it.
+                effect.fade(.30, delay=.045 if web_visible else 0)
 
     def _apply_theme(self):
         from .heavy_styles import apply_apple_design

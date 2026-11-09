@@ -310,7 +310,30 @@ body { font-family: var(--font-body-family, "Segoe UI"), sans-serif; font-size: 
 
 .order-actions{position:relative;min-height:44px;}
 .order-actions .access-overlay{border-radius:9px;font-size:1.1rem;}
-.empty-orders{position:absolute;inset:3.4rem 12px 0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:1.1rem;text-align:center;pointer-events:none;}
+/* Use individual offsets for Qt WebEngine builds that predate CSS inset. */
+.empty-orders {
+  position: absolute;
+  top: 3.4rem;
+  right: 12px;
+  bottom: 0;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 20px;
+  color: var(--muted);
+  font-size: 1.1rem;
+  text-align: center;
+  pointer-events: none;
+}
+.empty-orders img {
+  width: auto;
+  max-width: 100%;
+  max-height: 60%;
+  margin-bottom: 12px;
+  opacity: .8;
+}
 th{position:sticky;}
 .column-resizer{position:absolute;right:-4px;top:0;bottom:0;width:9px;z-index:3;cursor:col-resize;touch-action:none;}
 .column-resizer:hover,.column-resizer:focus{background:rgba(7,129,255,.32);outline:none;}
@@ -321,10 +344,6 @@ body.resizing-columns,body.resizing-columns *{cursor:col-resize!important;user-s
 .orders-top>.access-overlay{border-radius:15px;cursor:not-allowed;font-size:1.4rem;color:#7896b2;background:repeating-linear-gradient(135deg,#bdd4eb18 0,#bdd4eb18 1px,transparent 1px,transparent 15px),#e4f1fbbc;border:1px solid #b7d7f099;backdrop-filter:blur(2px);}
 html[data-theme="dark"] .orders-top>.access-overlay{color:#a6bed5;background:repeating-linear-gradient(135deg,#bad4eb15 0,#bad4eb15 1px,transparent 1px,transparent 15px),#19334ebc;}
 .tab:disabled{color:#8b9caf;cursor:not-allowed;}
-.empty-orders{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center;padding:20px;}
-.empty-orders[hidden]{display:none;}
-.empty-orders img{opacity:.8;}
-
 .history-panel{position:relative;}.history-panel.restricted h2{color:#8b9caf;}.history-access{position:absolute;inset:0;z-index:2;display:grid;place-items:center;cursor:not-allowed;color:#819ab4;background:repeating-linear-gradient(135deg,#bdd4eb18 0,#bdd4eb18 1px,transparent 1px,transparent 15px),#dcecf7b3;backdrop-filter:blur(2px);}.history-access[hidden]{display:none;}html[data-theme="dark"] .history-access{background:#19334ebc;}
 
 button.action-button:disabled{color:var(--muted);background:var(--field);border-color:var(--line);box-shadow:none;cursor:not-allowed;opacity:.62;}

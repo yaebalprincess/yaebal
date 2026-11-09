@@ -6,6 +6,7 @@ pointer highlight, ripple or transition is moving. No database access here.
 """
 from __future__ import annotations
 
+import math
 import time
 import weakref
 import re
@@ -152,38 +153,59 @@ class ControlLight(QWidget):
 
 
 class PageTransition(QWidget):
-    """Fade a snapshot away; live controls and WebEngine keep their own paint."""
-    def __init__(self, target, snapshot=None):
+    """Hold a painted frame inside the window, then reveal the live widgets."""
+
+    def __init__(self, target, snapshot, origin=None):
         super().__init__(target)
         self.setObjectName("LiquidPageTransition")
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.setAttribute(Qt.WA_NoSystemBackground)
         self.setFocusPolicy(Qt.NoFocus)
         self.snapshot = snapshot
-        self.started = time.monotonic()
-        self.duration = .22
-        self.amount = 1.0
+        self.origin = origin
+        self.progress = 0.0
         self.setGeometry(target.rect())
         self.show()
         self.raise_()
 
+    def fade(self, duration=.24, delay=0):
+        self.started = time.monotonic() + delay
+        self.duration = duration
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.raise_()
+        install_liquid_effects().wake(self)
+
     def tick(self, now):
-        t = min(1.0, (now-self.started)/self.duration)
-        self.amount = (1-t)**3
-        self.update()
-        if t >= 1:
-            self.hide()
-            self.deleteLater()
+        self.progress = max(0.0, min(1.0, (now - self.started) / self.duration))
+        if self.progress >= 1:
+            self.dismiss()
             return False
+        self.update()
         return True
 
+    def dismiss(self):
+        parent = self.parentWidget()
+        if getattr(parent, "_liquid_transition", None) is self:
+            parent._liquid_transition = None
+        self.hide()
+        self.deleteLater()
+
     def paintEvent(self, event):
-        p = QPainter(self)
-        p.setOpacity(self.amount)
-        if self.snapshot is not None and not self.snapshot.isNull():
-            p.drawPixmap(self.rect(), self.snapshot)
-        else:
-            p.fillRect(self.rect(), QColor(21, 39, 62) if theme_of(self) == "dark" else QColor(228, 243, 255))
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+        t = self.progress
+        eased = t * t * (3 - 2 * t)
+        if self.origin is None:
+            painter.setOpacity(1 - eased)
+        elif t > 0:
+            x, y = self.origin.x(), self.origin.y()
+            radius = math.hypot(max(x, self.width() - x), max(y, self.height() - y))
+            clip = QPainterPath()
+            clip.setFillRule(Qt.OddEvenFill)
+            clip.addRect(QRectF(self.rect()))
+            clip.addEllipse(QPointF(self.origin), eased * radius, eased * radius)
+            painter.setClipPath(clip)
+        painter.drawPixmap(self.rect(), self.snapshot)
 
 
 class LiquidController(QObject):
@@ -212,17 +234,18 @@ class LiquidController(QObject):
         if not self.active:
             self.timer.stop()
 
-    def transition(self, widget, snapshot=None):
+    def transition(self, widget, snapshot, *, origin=None, hold=False):
         if snapshot is None or snapshot.isNull():
             return
         old = getattr(widget, "_liquid_transition", None)
         if old is not None and not sip.isdeleted(old):
             self.active.discard(old)
-            old.hide()
-            old.deleteLater()
-        effect = PageTransition(widget, snapshot)
+            old.dismiss()
+        effect = PageTransition(widget, snapshot, origin)
         widget._liquid_transition = effect
-        self.wake(effect)
+        if not hold:
+            effect.fade()
+        return effect
 
     def backdrop(self, root):
         if getattr(root, "_liquid_backdrop", None) is None:
@@ -410,10 +433,10 @@ def apply_liquid_surface(widget, theme=None):
         controller.apply(widget, theme)
 
 
-def transition_to(widget, snapshot=None):
+def transition_to(widget, snapshot, *, origin=None, hold=False):
     controller = install_liquid_effects()
     if controller is not None:
-        controller.transition(widget, snapshot)
+        return controller.transition(widget, snapshot, origin=origin, hold=hold)
 
 
 def style_popup(widget, theme):
