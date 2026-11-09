@@ -2,6 +2,7 @@
 from datetime import datetime
 import json
 import pytest
+from PyQt5 import sip
 from PyQt5.QtCore import QEvent, QObject, QPoint, Qt
 from PyQt5.QtGui import QColor, QImage
 from PyQt5.QtWidgets import QApplication, QLabel, QPushButton, QWidget
@@ -157,10 +158,13 @@ def test_user_title_checkboxes_and_password_message(glass,app):
 def test_workshop_switch_reuses_web_view_and_keeps_session(glass,app):
     window,_,_=glass;view=window._glass;tracker=window.session_tracker
     assert window._switch_to_workshop("smoking") is window
-    assert window._workshop_loading.workshop=="smoking"
+    loading = window._workshop_loading
+    assert loading.workshop == "smoking"
     drain(app,lambda:window.workshop=="smoking" and not window._orders_running,timeout=10)
     assert window._glass is view and window.session_tracker is tracker and window.isVisible()
-    drain(app,lambda:not window._workshop_loading_timer.isActive())
+    drain(app, lambda: hasattr(loading, "_fade_out"))
+    assert loading._fade_out.duration() > 0
+    drain(app, lambda: sip.isdeleted(loading) or not loading.isVisible())
 
 
 @pytest.mark.parametrize("key",["packaging","smoking","drying","rennet","adyghe"])

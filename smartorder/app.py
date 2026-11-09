@@ -180,7 +180,6 @@ def main(boot_started: float | None = None) -> int:
     # Chromium shares OpenGL contexts with the existing Qt desktop windows.
     # This must be configured before QApplication is constructed.
     QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
-    QApplication.setAttribute(Qt.AA_DontUseNativeDialogs, True)
     app = QApplication(sys.argv)
     from .open_requests import forward_to_running, OpenRequestServer
     order_file = next((arg for arg in sys.argv[1:] if str(arg).lower().endswith('.sorder')),None)

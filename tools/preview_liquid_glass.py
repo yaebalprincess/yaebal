@@ -36,7 +36,6 @@ def main():
         from PyQt5.QtWidgets import QApplication
         QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
         QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
-        QApplication.setAttribute(Qt.AA_DontUseNativeDialogs, True)
         from smartorder.glass_ui import MainWindow
         from smartorder.config import SettingsStore, UiSettings
         from smartorder.db import Database

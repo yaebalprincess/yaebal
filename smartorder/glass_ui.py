@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 ASSET_ROOT = resource_path("smartorder/glass")
 ACTIONS = frozenset({"ready", "painted", "select", "filter", "date", "date_range", "create", "edit",
                      "export", "delete", "open", "view", "history", "tab",
-                     "columns", "theme", "zoom", "refresh", "workshop", "notifications",
+                     "columns", "theme", "zoom", "refresh", "workshop", "notifications", "all_orders",
                      "minimize", "maximize", "close", "move", "resize", "fullscreen"})
 
 
@@ -299,10 +299,15 @@ class MainWindow(EnterpriseWindow):
         filters["today"] = QDate.currentDate().toString("yyyy-MM-dd")
         from .i18n import web_catalog
         accessible = allowed_workshops(self.user)
+        if self._draft_view:
+            empty_message = "У вас нет несохранённых черновиков."
+        else:
+            empty_message = "Для начала работы создайте наряд." if self.can(Permission.ORDERS_CREATE) else "Наряды пока не созданы."
         return {
             "language": self.ui_settings.language, "translations": web_catalog(self.ui_settings.language),
             "columns": self.ui_settings.order_columns,
-            "emptyMessage": tr("Для начала работы создайте наряд." if self.can(Permission.ORDERS_CREATE) else "Наряды пока не созданы."),
+            "emptyMessage": tr(empty_message),
+            "draftView": self._draft_view,
             "embedded": True, "currentTab": self.tabs.currentIndex(),
             "appearance": self.ui_settings.appearance,
             "theme": self.ui_settings.theme, "zoom": self.ui_settings.zoom,
@@ -451,7 +456,7 @@ class MainWindow(EnterpriseWindow):
                 self._open_selected()
             elif action == "view":
                 self.view_order()
-            elif action == "edit" and self.can(Permission.ORDERS_EDIT) and self.edit_order_btn.isEnabled():
+            elif action == "edit" and self.edit_order_btn.isEnabled():
                 self.edit_order()
             elif action == "export" and self.can(Permission.ORDERS_EXPORT) and self.export_order_btn.isEnabled():
                 self.export_order()
@@ -487,6 +492,8 @@ class MainWindow(EnterpriseWindow):
                 self._switch_to_workshop(key)
         elif action == "notifications":
             self.show_notifications()
+        elif action == "all_orders":
+            self.show_draft_list(False)
         elif action == "minimize":
             self.showMinimized()
         elif action == "maximize":
@@ -507,7 +514,7 @@ class MainWindow(EnterpriseWindow):
         motion = getattr(self, "_window_motion", None)
         if (index >= 0 and index != self.tabs.currentIndex() and self.tabs.isTabEnabled(index)
                 and page is not None and page.isVisible()
-                and (motion is None or motion.animation is None)):
+                and (motion is None or not motion.running)):
             self._tab_frame = (index, page.grab())
 
     def _tab_changed(self, index):
@@ -556,7 +563,7 @@ class MainWindow(EnterpriseWindow):
     def changeEvent(self, event):
         super().changeEvent(event)
         motion = getattr(self, "_window_motion", None)
-        if event.type() == QEvent.WindowStateChange and (motion is None or motion.animation is None):
+        if event.type() == QEvent.WindowStateChange and (motion is None or not motion.running):
             self._schedule_glass_state()
 
     def closeEvent(self, event):

@@ -6,7 +6,6 @@ pointer highlight, ripple or transition is moving. No database access here.
 """
 from __future__ import annotations
 
-import math
 import time
 import weakref
 import re
@@ -16,7 +15,7 @@ from PyQt5.QtCore import QEvent, QObject, QPointF, QRectF, Qt, QTimer
 from PyQt5.QtGui import (QColor, QLinearGradient, QPainter, QPainterPath,
                          QPen, QPixmap, QRadialGradient)
 from PyQt5.QtWidgets import (QAbstractButton, QAbstractItemView, QApplication,
-    QCalendarWidget, QComboBox, QDialog, QFrame, QGroupBox, QLabel, QLineEdit, QMainWindow,
+    QCalendarWidget, QComboBox, QDialog, QFileDialog, QFrame, QGroupBox, QLabel, QLineEdit, QMainWindow,
     QMenu, QPushButton, QScrollArea, QTabBar, QTextBrowser, QToolButton, QWidget)
 
 from .config import resource_path
@@ -155,21 +154,20 @@ class ControlLight(QWidget):
 class PageTransition(QWidget):
     """Hold a painted frame inside the window, then reveal the live widgets."""
 
-    def __init__(self, target, snapshot, origin=None):
+    def __init__(self, target, snapshot):
         super().__init__(target)
         self.setObjectName("LiquidPageTransition")
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.setAttribute(Qt.WA_NoSystemBackground)
         self.setFocusPolicy(Qt.NoFocus)
         self.snapshot = snapshot
-        self.origin = origin
         self.progress = 0.0
         self.setGeometry(target.rect())
         self.show()
         self.raise_()
 
-    def fade(self, duration=.24, delay=0):
-        self.started = time.monotonic() + delay
+    def fade(self, duration=.24):
+        self.started = time.monotonic()
         self.duration = duration
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.raise_()
@@ -195,23 +193,13 @@ class PageTransition(QWidget):
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
         t = self.progress
         eased = t * t * (3 - 2 * t)
-        if self.origin is None:
-            painter.setOpacity(1 - eased)
-        elif t > 0:
-            x, y = self.origin.x(), self.origin.y()
-            radius = math.hypot(max(x, self.width() - x), max(y, self.height() - y))
-            clip = QPainterPath()
-            clip.setFillRule(Qt.OddEvenFill)
-            clip.addRect(QRectF(self.rect()))
-            clip.addEllipse(QPointF(self.origin), eased * radius, eased * radius)
-            painter.setClipPath(clip)
+        painter.setOpacity(1 - eased)
         painter.drawPixmap(self.rect(), self.snapshot)
 
 
 class LiquidController(QObject):
     def __init__(self, app):
         super().__init__(app)
-        QApplication.setAttribute(Qt.AA_DontUseNativeDialogs, True)
         self.app = app
         self.lights = weakref.WeakKeyDictionary()
         self.active = weakref.WeakSet()
@@ -234,14 +222,14 @@ class LiquidController(QObject):
         if not self.active:
             self.timer.stop()
 
-    def transition(self, widget, snapshot, *, origin=None, hold=False):
+    def transition(self, widget, snapshot, *, hold=False):
         if snapshot is None or snapshot.isNull():
             return
         old = getattr(widget, "_liquid_transition", None)
         if old is not None and not sip.isdeleted(old):
             self.active.discard(old)
             old.dismiss()
-        effect = PageTransition(widget, snapshot, origin)
+        effect = PageTransition(widget, snapshot)
         widget._liquid_transition = effect
         if not hold:
             effect.fade()
@@ -348,14 +336,16 @@ class LiquidController(QObject):
     def is_overlay(widget):
         # Qt creates private combo popup windows during polish. Converting those
         # hidden native containers to glass surfaces can expose empty windows.
-        return not widget.property("plainSurface") and (isinstance(widget, (QDialog, QMenu)) or bool(widget.property("liquidPopup"))
+        return not isinstance(widget, QFileDialog) and not widget.property("plainSurface") and (isinstance(widget, (QDialog, QMenu)) or bool(widget.property("liquidPopup"))
                 or widget.objectName() in {"NotificationPopup", "RC5InfoPopup"})
 
     def eventFilter(self, widget, event):
         if not isinstance(widget, QWidget) or isinstance(widget, (GlassBackdrop, LiveGlassBackdrop, ControlLight, PageTransition)) or legacy_surface(widget):
             return False
         kind = event.type()
-        if widget.property("plainSurface") or widget.window().property("plainSurface"):return False
+        window = widget.window()
+        if isinstance(window, QFileDialog) or widget.property("plainSurface") or window.property("plainSurface"):
+            return False
         overlay = self.is_overlay(widget)
         if kind == QEvent.Polish and overlay:
             prepare_overlay(widget)
@@ -433,10 +423,10 @@ def apply_liquid_surface(widget, theme=None):
         controller.apply(widget, theme)
 
 
-def transition_to(widget, snapshot, *, origin=None, hold=False):
+def transition_to(widget, snapshot, *, hold=False):
     controller = install_liquid_effects()
     if controller is not None:
-        return controller.transition(widget, snapshot, origin=origin, hold=hold)
+        return controller.transition(widget, snapshot, hold=hold)
 
 
 def style_popup(widget, theme):

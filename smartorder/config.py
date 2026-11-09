@@ -10,7 +10,7 @@ from copy import deepcopy
 from datetime import datetime
 
 APP_NAME = "SmartOrder"
-APP_VERSION = "1.0.8"
+APP_VERSION = "1.0.9"
 _ACTIVE_WORKSHOP = "packaging"
 WORKSHOP_DB_FILES = {
     "packaging":"work_orders_ypak.db", "smoking":"work_orders_koptil.db",
@@ -117,10 +117,11 @@ def local_state_dir() -> Path:
     return path
 
 
-def local_drafts_dir() -> Path:
+def local_drafts_dir(workshop: str | None = None) -> Path:
     path = local_state_dir() / "drafts"
-    if _ACTIVE_WORKSHOP != "packaging":
-        path = path / _ACTIVE_WORKSHOP
+    key = workshop or _ACTIVE_WORKSHOP
+    if key != "packaging":
+        path = path / key
     path.mkdir(parents=True, exist_ok=True)
     return path
 

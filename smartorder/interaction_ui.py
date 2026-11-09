@@ -15,6 +15,29 @@ class FittingTabBar(QTabBar):
         index=self.tabAt(event.pos());self.setCursor(Qt.ForbiddenCursor if index>=0 and not self.isTabEnabled(index) else Qt.ArrowCursor)
         super().mouseMoveEvent(event)
 
+    def paintEvent(self, event):
+        from .liquid_effects import theme_of
+
+        dark = theme_of(self) == "dark"
+        palette = colors(dark)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        for index in range(self.count()):
+            rect = QRectF(self.tabRect(index)).adjusted(.5, 1.5, -1.5, -1.5)
+            if not rect.intersects(QRectF(event.rect())):
+                continue
+            selected = index == self.currentIndex()
+            fill = QColor("#244562" if selected else "#1a304a") if dark else QColor("#f5fbff" if selected else "#dcecf9")
+            fill.setAlpha(225 if selected else 160)
+            line = QColor("#56799c" if dark else "#9dbddc")
+            line.setAlpha(160)
+            painter.setBrush(fill)
+            painter.setPen(QPen(line, 1))
+            painter.drawRoundedRect(rect, 8, 8)
+            role = "disabled" if not self.isTabEnabled(index) else "blue" if selected else "muted"
+            painter.setPen(QColor(palette[role]))
+            painter.drawText(rect, Qt.AlignCenter | Qt.TextShowMnemonic, self.tabText(index))
+
 
 class AccessCursor(QObject):
     def __init__(self,app):
@@ -119,87 +142,61 @@ class WindowMotion(QObject):
     def __init__(self, window):
         super().__init__(window)
         self.window = window
-        self.animation = None
+        self.running = False
+        self._settle = QTimer(self)
+        self._settle.setSingleShot(True)
+        self._settle.setInterval(36)
+        self._settle.timeout.connect(self._finish)
+        window.installEventFilter(self)
 
     def toggle(self, fullscreen=True):
-        if self.animation is not None:
+        if self.running:
             return
         from .liquid_effects import transition_to
 
         window = self.window
-        screen = window.screen() or QApplication.primaryScreen()
-        current = QRect(window.geometry())
-        normal = QRect(window.normalGeometry())
-        if not normal.isValid():
-            normal = current
-        if fullscreen and window.isFullScreen():
-            mode = getattr(self, "before_fullscreen_mode", Qt.WindowNoState)
-            target = getattr(self, "before_fullscreen_rect", normal)
-        elif fullscreen:
-            self.before_fullscreen_mode = Qt.WindowMaximized if window.isMaximized() else Qt.WindowNoState
-            self.before_fullscreen_rect = current
-            self.normal_rect = getattr(self, "normal_rect", normal) if window.isMaximized() else current
-            mode, target = Qt.WindowFullScreen, screen.geometry()
-        elif window.isMaximized():
-            mode, target = Qt.WindowNoState, getattr(self, "normal_rect", normal)
+        if fullscreen:
+            if window.isFullScreen():
+                mode = getattr(self, "before_fullscreen_mode", Qt.WindowNoState)
+            else:
+                self.before_fullscreen_mode = Qt.WindowMaximized if window.isMaximized() else Qt.WindowNoState
+                mode = Qt.WindowFullScreen
         else:
-            self.normal_rect = current
-            mode, target = Qt.WindowMaximized, screen.availableGeometry()
+            mode = Qt.WindowNoState if window.isMaximized() else Qt.WindowMaximized
 
         feedback = getattr(window, "_fullscreen_feedback", None)
         if feedback is not None:
             feedback.hide()
-        frame = transition_to(window, window.grab(), hold=True)
-        layout, shell = window.layout(), window.centralWidget()
-        if frame is not None:
-            # Resize the displayed frame; the web renderer, charts and tables
-            # get a single layout pass at the destination size.
-            frame.setAttribute(Qt.WA_TransparentForMouseEvents, False)
-            layout.setEnabled(False)
-            shell.setUpdatesEnabled(False)
+        self._frame = transition_to(window, window.grab(), hold=True)
+        self._show_feedback = fullscreen
+        self.running = True
+        # Commit the final native mode once. The fading child covers the
+        # renderer until the window manager has delivered the new geometry.
+        window.setWindowState(mode)
+        self._settle.start()
 
-        animation = QPropertyAnimation(window, b"geometry", self)
-        self.animation = animation
-        animation.setDuration(270)
-        animation.setEasingCurve(QEasingCurve.InOutCubic)
-        animation.setStartValue(current)
-        animation.setEndValue(target)
-        window.setUpdatesEnabled(False)
-        try:
-            if window.isFullScreen() or window.isMaximized():
-                window.setWindowState(Qt.WindowNoState)
-            window.setGeometry(current)
-        finally:
-            window.setUpdatesEnabled(True)
+    def eventFilter(self, watched, event):
+        if self.running and event.type() == QEvent.Resize:
+            self._settle.start()
+        return False
 
-        def finish():
-            window.setUpdatesEnabled(False)
-            try:
-                # The animation is already at the destination. Returning to
-                # the saved normal rectangle here would add a resize between
-                # the last animation frame and the native mode change.
-                window.setWindowState(mode)
-                if frame is not None:
-                    layout.setEnabled(True)
-                    layout.invalidate()
-                    layout.setGeometry(window.contentsRect())
-                    shell.setUpdatesEnabled(True)
-            finally:
-                window.setUpdatesEnabled(True)
-            hint = "Esc — выйти из полноэкранного режима" if window.isFullScreen() else "Esc — для полноэкранного режима"
-            window.fullscreen_hint_label.setText(tr(hint))
-            window._apply_native_titlebars()
-            self.animation = None
-            animation.deleteLater()
-            if hasattr(window, "_schedule_glass_state"):
-                window._schedule_glass_state()
+    def _finish(self):
+        window = self.window
+        frame, self._frame = self._frame, None
+        self.running = False
+        if not window.isVisible():
             if frame is not None:
-                frame.fade(.16)
-            if fullscreen:
-                window._show_fullscreen_feedback(window.isFullScreen())
-
-        animation.finished.connect(finish)
-        animation.start()
+                frame.dismiss()
+            return
+        fullscreen = window.isFullScreen()
+        hint = "Esc — выйти из полноэкранного режима" if fullscreen else "Esc — для полноэкранного режима"
+        window.fullscreen_hint_label.setText(tr(hint))
+        if hasattr(window, "_schedule_glass_state"):
+            window._schedule_glass_state()
+        if frame is not None:
+            frame.fade(.24)
+        if self._show_feedback:
+            window._show_fullscreen_feedback(fullscreen)
 
 
 def align_order_footer(dialog):

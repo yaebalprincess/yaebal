@@ -24,6 +24,33 @@ def colors(dark=False):
     }
 
 
+def style_range_calendar(calendar, theme):
+    """The day grid paints an opaque surface inside the glass dialog."""
+    from PyQt5.QtGui import QColor, QPalette
+    from PyQt5.QtWidgets import QAbstractItemView
+
+    dark = theme == "dark"
+    background = "#192e46" if dark else "#eef7ff"
+    ink = colors(dark)["ink"]
+    palette = calendar.palette()
+    for role in (QPalette.Base, QPalette.AlternateBase, QPalette.Window):
+        palette.setColor(role, QColor(background))
+    for role in (QPalette.Text, QPalette.WindowText):
+        palette.setColor(role, QColor(ink))
+    palette.setColor(QPalette.Highlight, QColor("#0785ff"))
+    palette.setColor(QPalette.HighlightedText, QColor("#ffffff"))
+    calendar.setPalette(palette)
+    view = calendar.findChild(QAbstractItemView, "qt_calendar_calendarview")
+    if view is not None:
+        view.setPalette(palette)
+        view.viewport().setPalette(palette)
+        view.viewport().setAutoFillBackground(True)
+        view.setStyleSheet(
+            f"QAbstractItemView{{background-color:{background};color:{ink};border:0;outline:0;"
+            "selection-background-color:#0785ff;selection-color:#ffffff;}"
+        )
+
+
 def liquid_qss(zoom=100, appearance=None):
     from .config import resource_path
     checkmark=resource_path("smartorder/glass/assets/checkmark.svg").as_posix()

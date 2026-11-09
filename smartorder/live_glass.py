@@ -32,6 +32,10 @@ class GlassTitleBar(QFrame):
         row.addWidget(self.title, 1)
         self.controls = []
         if window.property("fullWindowControls"):
+            edit_banner = window.findChild(QFrame, "EditModeBanner")
+            if edit_banner is not None:
+                window.layout().removeWidget(edit_banner)
+                row.addWidget(edit_banner)
             from .enterprise_ui import CaptionButton
             for kind, callback in [("min",window.showMinimized),("max",self.toggle_max),("close",window.close)]:
                 control = CaptionButton(kind, self)

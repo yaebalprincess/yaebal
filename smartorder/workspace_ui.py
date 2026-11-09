@@ -2,7 +2,7 @@
 from functools import lru_cache
 import json
 from pathlib import Path
-from PyQt5.QtCore import QEvent, QRectF, QSize, Qt
+from PyQt5.QtCore import QEvent, QEasingCurve, QPropertyAnimation, QRectF, QSize, Qt
 from PyQt5.QtGui import QColor, QFontMetrics, QImageReader, QLinearGradient, QPainter, QPalette, QPixmap
 from PyQt5.QtWidgets import QDialog, QFrame, QLabel, QProgressBar, QPushButton, QVBoxLayout
 from .appearance import typography_qss, font_for
@@ -87,6 +87,20 @@ class WorkshopLoadingDialog(QDialog):
         progress=QProgressBar();progress.setRange(0,0);progress.setTextVisible(False);progress.setFixedHeight(6)
         progress.setStyleSheet("QProgressBar{background:rgba(255,255,255,65);border:0;border-radius:3px;}QProgressBar::chunk{background:#63b4ff;border-radius:3px;}");layout.addWidget(progress)
         if parent is not None:self.move(parent.frameGeometry().center()-self.rect().center())
+
+    def fade_out(self):
+        if hasattr(self, "_fade_out"):
+            return self._fade_out
+        animation = QPropertyAnimation(self, b"windowOpacity", self)
+        animation.setDuration(180)
+        animation.setStartValue(self.windowOpacity())
+        animation.setEndValue(0.0)
+        animation.setEasingCurve(QEasingCurve.InOutQuad)
+        animation.finished.connect(self.close)
+        animation.finished.connect(self.deleteLater)
+        self._fade_out = animation
+        animation.start()
+        return animation
     def paintEvent(self,event):
         painter=QPainter(self);painter.fillRect(self.rect(),QColor("#15273e"))
         if not self.picture.isNull():

@@ -222,6 +222,12 @@ class MainWindow(RC18MainWindow):
         self._initial_ui_settings,self._profile_sync_status=load_shared_settings(self.workshop_manager.auth,user,local)
         self._switching=False;self._heartbeat_running=False;self.analytics=None
         self._notification_items=[];self._notification_count=0;self._notification_loading=False;self.notification_popup=None
+        from .draft_reminders import dismissed_drafts
+        self._dismissed_drafts = dismissed_drafts(user)
+        self._draft_keys = ()
+        self._next_draft_scan = 0.0
+        self._draft_view = False
+        self._draft_after_switch = None
         super().__init__(db,user)
         self.session_tracker.ui_settings = self.ui_settings
         from .profile_sync import ProfileSync
@@ -394,6 +400,32 @@ class MainWindow(RC18MainWindow):
         from .workspace_ui import EmptyTableMessage
         self.native_empty_orders=EmptyTableMessage(view,"Для начала работы создайте наряд.")
 
+        self.draft_bar = QFrame(view.parentWidget())
+        self.draft_bar.setObjectName("GlassPanel")
+        draft_bar_layout = QHBoxLayout(self.draft_bar)
+        draft_bar_layout.addWidget(QLabel("Ваши черновики", self.draft_bar), 1)
+        all_orders = QPushButton("Все наряды", self.draft_bar)
+        all_orders.clicked.connect(lambda: self.show_draft_list(False))
+        draft_bar_layout.addWidget(all_orders)
+        view_layout = view.parentWidget().layout()
+        view_layout.insertWidget(view_layout.indexOf(view), self.draft_bar)
+        self.draft_bar.hide()
+
+    def show_draft_list(self, enabled=True):
+        if not self.can(Permission.ORDERS_VIEW):
+            return
+        self._set_draft_view(enabled)
+        self.tabs.setCurrentIndex(0)
+        self._display_orders = None
+        self.orders_table.report_model.set_rows([])
+        self.refresh_orders()
+
+    def _set_draft_view(self, enabled):
+        self._draft_view = enabled
+        self.draft_bar.setVisible(enabled)
+        self.native_empty_orders.message = "У вас нет несохранённых черновиков." if enabled else "Для начала работы создайте наряд."
+        self.native_empty_orders.refresh()
+
     def refresh_orders(self,*_):
         if not hasattr(self,"_live_signals") or self._live_closed:return
         if not self.can(Permission.ORDERS_VIEW):
@@ -401,17 +433,21 @@ class MainWindow(RC18MainWindow):
         self._orders_generation+=1
         shift=source_text(self.order_filter_shift)
         query={"start":self.order_filter_date.startDate().toString("yyyy-MM-dd"),"end":self.order_filter_date.endDate().toString("yyyy-MM-dd"),"master":self.order_filter_master.currentData(),"department":self.order_filter_dep.currentData(),"shift":None if shift=="Все смены" else shift}
-        self._orders_pending=(self._orders_generation,query)
+        self._orders_pending=(self._orders_generation,query,self._draft_view)
         self._start_orders_read()
 
     def _start_orders_read(self):
         if self._orders_running or self._orders_pending is None:return
-        self._orders_running=True;generation,query=self._orders_pending;self._orders_pending=None
+        self._orders_running=True;generation,query,draft_view=self._orders_pending;self._orders_pending=None
         db,root,key,signals=self.db,self.workshop_manager.root,self.workshop,self._live_signals
+        manager, user = self.workshop_manager, self.user
         drafts=local_drafts_dir()
         def worker():
             from .desktop_live import load_orders
-            try:display=load_orders(db,root,key,drafts,query);error=""
+            from .draft_reminders import draft_rows
+            try:
+                display = draft_rows(manager, user) if draft_view else load_orders(db, root, key, drafts, query)
+                error = ""
             except Exception as exc:display=None;error=str(exc)
             try:signals.orders.emit(generation,display,error)
             except RuntimeError:pass
@@ -441,7 +477,8 @@ class MainWindow(RC18MainWindow):
     def _order_selection_changed(self):
         if not hasattr(self,"_live_signals"):return
         ref=self._selected_ref();draft=isinstance(ref,str) and ref.lower().endswith(".json")
-        self.edit_order_btn.setEnabled(bool(ref) and self.can(Permission.ORDERS_EDIT))
+        can_edit = self.can(Permission.ORDERS_EDIT) or draft and self.can(Permission.ORDERS_CREATE)
+        self.edit_order_btn.setEnabled(bool(ref) and can_edit)
         self.export_order_btn.setEnabled(isinstance(ref,int) and self.can(Permission.ORDERS_EXPORT))
         self.delete_draft_btn.setEnabled(draft and self.can(Permission.ORDERS_DELETE_DRAFT))
         self._history_generation+=1;generation=self._history_generation;self.info_users_list.clear()
@@ -666,17 +703,6 @@ class MainWindow(RC18MainWindow):
 
     def _theme_toggled(self,checked):
         theme = "dark" if checked else "light"
-        motion = getattr(self, "_window_motion", None)
-        if (theme != self.ui_settings.theme and self.isVisible()
-                and not getattr(self, "_scheduled_change", False)
-                and (motion is None or motion.animation is None)):
-            toggle = self.theme
-            panel = getattr(self, "appearance_panel", None)
-            if not toggle.isVisible() and panel is not None:
-                toggle = panel.theme_toggle
-            if toggle.isVisible():
-                shell = self.centralWidget()
-                self._theme_frame = (shell.grab(), toggle.mapTo(shell, toggle.rect().center()))
         if self.ui_settings.auto_theme and not getattr(self,"_scheduled_change",False):self.ui_settings.auto_theme=False
         self.ui_settings.theme = theme
         self.theme_caption.setText(tr("Тёмная тема" if checked else "Светлая тема"))
@@ -686,22 +712,9 @@ class MainWindow(RC18MainWindow):
         self._theme_apply_timer.start(0)
 
     def _finish_theme_change(self):
-        frame = getattr(self, "_theme_frame", None)
-        self._theme_frame = None
         self._apply_theme();self.settings_store.save(self.ui_settings)
         self._update_zoom_mode()
         if hasattr(self,"_schedule_glass_state"):self._schedule_glass_state()
-        if frame is not None:
-            from .liquid_effects import transition_to
-            snapshot, origin = frame
-            effect = transition_to(self.centralWidget(), snapshot, origin=origin, hold=True)
-            if effect is not None:
-                web = getattr(self, "_glass", None)
-                web_visible = web is not None and web.isVisible() and self._glass_ready
-                if web_visible:
-                    self._publish_glass_state()
-                # Let Chromium receive the new palette before revealing it.
-                effect.fade(.30, delay=.045 if web_visible else 0)
 
     def _apply_theme(self):
         from .heavy_styles import apply_apple_design
@@ -756,6 +769,19 @@ class MainWindow(RC18MainWindow):
             self.open_notification_order({"workshop_key":self.workshop,"order_id":ref});return
         return super()._open_selected()
 
+    def _open_draft(self, path):
+        if self._live_closed or getattr(self, "_workshop_switching", False):
+            return
+        from .draft_reminders import draft_workshop
+        workshop = draft_workshop(self.workshop_manager.root, self.user, path)
+        if workshop is None:
+            return
+        if workshop != self.workshop:
+            self._draft_after_switch = (workshop, Path(path))
+            self._switch_to_workshop(workshop)
+            return
+        return super()._open_draft(Path(path))
+
     def export_order(self):
         try:
             self.workshop_manager.require(self.user,Permission.ORDERS_EXPORT)
@@ -766,8 +792,9 @@ class MainWindow(RC18MainWindow):
         item=self.orders_table.itemAt(pos)
         if item is None:return
         self.orders_table.selectRow(item.row());ref=self._selected_ref();menu=QMenu(self)
+        edit_permission = Permission.ORDERS_CREATE if isinstance(ref, str) and self.can(Permission.ORDERS_CREATE) else Permission.ORDERS_EDIT
         entries=[("Просмотреть наряд",Permission.ORDERS_VIEW,self._open_selected,ref is not None),
-            ("Редактировать",Permission.ORDERS_EDIT,self.edit_order,ref is not None),
+            ("Редактировать",edit_permission,self.edit_order,ref is not None),
             ("Выгрузить в Excel",Permission.ORDERS_EXPORT,self.export_order,isinstance(ref,int)),
             ("Удалить черновик",Permission.ORDERS_DELETE_DRAFT,self.delete_selected_draft,isinstance(ref,str)),
             ("ИСТОРИЯ РЕДАКТИРОВАНИЙ",Permission.ORDERS_HISTORY,self._show_history_details,isinstance(ref,int))]
@@ -1135,9 +1162,13 @@ class MainWindow(RC18MainWindow):
     def _apply_workshop_switch(self,result):
         key,db,error=result;loading=self._workshop_loading;self._workshop_switching=False;self.titlebar.badge.setEnabled(getattr(self,"_account_active",True))
         if error:
-            loading.close();loading.deleteLater();QMessageBox.warning(self,"Цех",error);return
+            self._draft_after_switch = None
+            loading.fade_out()
+            QMessageBox.warning(self, "Цех", error)
+            return
         self._orders_generation+=1;self._history_generation+=1
         self.db=db;self.workshop=key;set_active_workshop(key);self._display_orders=None;self._live_tokens=None
+        self._set_draft_view(False)
         self.orders_table.report_model.set_rows([]);self._rc12_dirty_tabs.update({0,1,2,3})
         from .i18n import tr
         self.titlebar.badge.setText(f"{self.user.username}  ·  {tr(WORKSHOPS[key])}  ▾")
@@ -1146,30 +1177,52 @@ class MainWindow(RC18MainWindow):
         except OSError:pass
         if hasattr(self,"_schedule_glass_state"):self._schedule_glass_state()
         if self.analytics is not None:self.analytics.reload()
-        self._workshop_loading_timer=QTimer(self);self._workshop_loading_timer.setInterval(30)
+        pending, self._draft_after_switch = self._draft_after_switch, None
+        timer = QTimer(self)
+        timer.setInterval(30)
         def finish():
-            if self._orders_running or self._orders_pending is not None:return
-            self._workshop_loading_timer.stop();loading.close();loading.deleteLater()
-        self._workshop_loading_timer.timeout.connect(finish);self._workshop_loading_timer.start()
+            if self._orders_running or self._orders_pending is not None:
+                return
+            timer.stop()
+            timer.deleteLater()
+            animation = loading.fade_out()
+            if pending is not None and pending[0] == key:
+                animation.finished.connect(lambda: QTimer.singleShot(0, lambda: self._open_draft(pending[1])))
+        timer.timeout.connect(finish)
+        timer.start()
 
     def open_diagnostics_center(self):
         from .live_ui import LiveDiagnosticsDialog
         dialog=LiveDiagnosticsDialog(self);dialog.setWindowState(dialog.windowState()|Qt.WindowMaximized);dialog.exec_()
 
-    def refresh_notifications(self):
-        if self._notification_loading:return
-        self._notification_loading=True
+    def refresh_notifications(self, *, scan_drafts=False):
+        if scan_drafts:
+            self._next_draft_scan = 0.0
+        if self._notification_loading or not self.can(Permission.NOTIFICATIONS_VIEW):
+            return
+        self._notification_loading = True
         from .live_ui import notifications,unread_count
+        manager, user = self.workshop_manager, self.user
+        scan = user.can(Permission.ORDERS_VIEW) and time.monotonic() >= self._next_draft_scan
+        cached_drafts = self._draft_keys if user.can(Permission.ORDERS_VIEW) else ()
+        if scan:
+            self._next_draft_scan = time.monotonic() + 20
+
         def worker():
             try:
-                workshop_access=self.can(Permission.NOTIFICATIONS_VIEW)
-                items=notifications(self.workshop_manager,self.user) if workshop_access else []
-                count=unread_count(self.workshop_manager,self.user) if workshop_access else 0
+                items = notifications(manager, user)
+                count = unread_count(manager, user)
+                keys = cached_drafts
+                if scan:
+                    from .draft_reminders import owned_drafts
+                    keys = tuple(sorted(owned_drafts(manager, user)))
                 notice=read_update_announcement()
                 if notice:
                     message=(notice.get("title") or "Обновление SmartOrder")
                     if notice.get("description"):message += "\n" + notice["description"]
                     items.insert(0,{"id":-1,"read_at":None,"workshop_key":self.workshop,"created_at":notice.get("created_at") or "", "version":notice["version"],"message":message})
+                if keys:
+                    items.insert(0, {"kind": "drafts", "keys": keys})
                 error=""
             except Exception as exc:items=[];count=0;error=str(exc)
             try:self._notification_signals.loaded.emit(items,count,error)
@@ -1177,13 +1230,37 @@ class MainWindow(RC18MainWindow):
         threading.Thread(target=worker,name="SmartOrderNotifications",daemon=True).start()
 
     def _notifications_loaded(self,items,count,error):
-        self._notification_loading=False
+        self._notification_loading = False
+        if self._live_closed or not self.can(Permission.NOTIFICATIONS_VIEW):
+            return
         if not error:
-            self._notification_items=items;self._notification_count=count
-            self.titlebar.bell.setText("🔔"+(f" {count}" if count else ""))
-            self.titlebar.bell.setStyleSheet("QPushButton{border:1px solid "+("#ED71A7" if count else "#738097")+";border-radius:10px;padding:4px 10px;min-height:22px;font-size:14px;}QPushButton:hover{border-color:#16B9B0;}QPushButton:pressed{background:#263B55;}")
+            draft_notice = next((item for item in items if item.get("kind") == "drafts"), None)
+            self._draft_keys = draft_notice["keys"] if draft_notice is not None else ()
+            visible = bool(self._draft_keys) and self.can(Permission.ORDERS_VIEW) and not self._dismissed_drafts.issuperset(self._draft_keys)
+            self._notification_items = [item for item in items if item is not draft_notice or visible]
+            self._notification_count = count + int(visible)
+        self._render_notifications(error)
+
+    def dismiss_draft_notice(self, notice):
+        from .draft_reminders import dismiss_drafts
+        keys = self._dismissed_drafts.union(notice["keys"])
+        dismiss_drafts(self.user, keys)
+        self._dismissed_drafts = keys
+        previous_count = len(self._notification_items)
+        self._notification_items = [item for item in self._notification_items
+                                    if item.get("kind") != "drafts" or not keys.issuperset(item["keys"])]
+        self._notification_count -= previous_count - len(self._notification_items)
+        self._render_notifications()
+
+    def _render_notifications(self, error=""):
+        count = self._notification_count
+        self.titlebar.bell.setText("🔔" + (f" {count}" if count else ""))
+        style = "QPushButton{border:1px solid "+("#ED71A7" if count else "#738097")+";border-radius:10px;padding:4px 10px;min-height:22px;font-size:14px;}QPushButton:hover{border-color:#16B9B0;}QPushButton:pressed{background:#263B55;}"
+        if self.titlebar.bell.styleSheet() != style:
+            self.titlebar.bell.setStyleSheet(style)
         self.titlebar.bell.setToolTip("Не удалось обновить уведомления: "+error if error else f"Непрочитанных уведомлений: {count}")
-        if self.notification_popup and self.notification_popup.isVisible():self.notification_popup.render(items,error)
+        if self.notification_popup and self.notification_popup.isVisible():
+            self.notification_popup.render(self._notification_items, error)
 
     def show_notifications(self):
         if not self.can(Permission.NOTIFICATIONS_VIEW):return
@@ -1193,7 +1270,7 @@ class MainWindow(RC18MainWindow):
         point=self.titlebar.bell.mapToGlobal(self.titlebar.bell.rect().bottomRight())
         screen=QApplication.screenAt(point) or QApplication.primaryScreen();bounds=screen.availableGeometry()
         x=max(bounds.left(),min(point.x()-460,bounds.right()-460));y=min(point.y()+6,bounds.bottom()-450)
-        self.notification_popup.move(x,y);self.notification_popup.show();self.refresh_notifications()
+        self.notification_popup.move(x,y);self.notification_popup.show();self.refresh_notifications(scan_drafts=True)
 
     def open_notification_order(self,notice):
         self.workshop_manager.require(self.user,Permission.ORDERS_VIEW)

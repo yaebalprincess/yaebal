@@ -39,6 +39,11 @@ class FontWeightCombo(QComboBox):
         else: event.ignore()
 
 
+class FontSizeSpinBox(QDoubleSpinBox):
+    def wheelEvent(self, event):
+        event.ignore()
+
+
 class AppearancePanel(QGroupBox):
     def __init__(self, owner):
         super().__init__("Персонализация")
@@ -100,7 +105,7 @@ class AppearancePanel(QGroupBox):
             family.setMinimumWidth(160)
             family.setMaximumWidth(280)
             family.setCurrentFont(QFont(spec["family"]))
-            size = QDoubleSpinBox()
+            size = FontSizeSpinBox()
             size.setObjectName("FontSize_" + role)
             size.setRange(6, 64); size.setSingleStep(.5); size.setDecimals(1); size.setValue(spec["size"])
             weight = FontWeightCombo()

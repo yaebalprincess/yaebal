@@ -207,7 +207,13 @@ class AnimatedChart(QWidget):
         for i,v in enumerate(vals):
             span=360*v/total if total else 0;p.setPen(QPen(QColor(COLORS[i%6]),18,Qt.SolidLine,Qt.RoundCap));p.drawArc(box,int(angle*16),-int(max(0,span-3)*16));angle-=span
         appearance=appearance_of(self);zoom=getattr(QApplication.instance(),"_smartorder_stylesheet_zoom",100)
-        p.setPen(QColor(pal["text"]));p.setFont(font_for("heading",zoom,appearance));p.drawText(box,Qt.AlignCenter,pretty(total));p.setFont(font_for("body",zoom,appearance));p.setPen(QColor(pal["muted"]));p.drawText(QRectF(box.left(),box.center().y()+20,size,30),Qt.AlignCenter,self.suffix)
+        p.setPen(QColor(pal["text"]))
+        p.setFont(font_for("heading", zoom, appearance))
+        p.drawText(box, Qt.AlignCenter, pretty(total))
+        p.setFont(font_for("body", zoom, appearance))
+        p.setPen(QColor(pal["muted"]))
+        caption = QRectF(16, box.bottom() + 13, self.width() - 32, 30)
+        p.drawText(caption, Qt.AlignHCenter | Qt.AlignTop, tr(self.suffix))
 
 
 class MetricCard(QFrame):
@@ -475,8 +481,19 @@ class AnalyticsWidget(QWidget):
         self._entity_detail(item,"master")
 
     def _methodology(self):
-        if not self.report:return
-        d=QDialog(self);apply_surface_theme(d,self.dark);d.setWindowTitle("Методика аналитики");d.resize(720,480);l=QVBoxLayout(d);b=QTextBrowser();b.setPlainText(self.report.methodology);l.addWidget(b);d.exec_()
+        from .analytics_help import methodology_html
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(tr("Методика аналитики"))
+        dialog.resize(940, 720)
+        layout = QVBoxLayout(dialog)
+        browser = QTextBrowser(dialog)
+        browser.setHtml(methodology_html(self.report, self.dark))
+        browser.setOpenExternalLinks(False)
+        layout.addWidget(browser)
+        apply_surface_theme(dialog, self.dark)
+        dialog.exec_()
+        dialog.deleteLater()
 
     def export_excel(self):
         if not self.report or self._exporting or self._running or self.reload_timer.isActive() or self._filter_running or self.filter_timer.isActive():return

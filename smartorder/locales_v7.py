@@ -333,7 +333,13 @@ NEW_DATA='''Учётная запись отключена. Войдите за�
 Изменений Ваших нарядов другими пользователями пока нет.|No changes to your work orders by other users yet.|Todavía no hay cambios de otros usuarios en sus órdenes.|Басқа пайдаланушылар нарядтарыңызды әлі өзгерткен жоқ.|Aucune modification de vos ordres par d’autres utilisateurs.|Noch keine Änderungen Ihrer Aufträge durch andere Benutzer.|他のユーザーによる作業指示書の変更はありません。|Башка кулланучылар сезнең нарядларны әле үзгәртмәгән.
 Изменить|Edit|Editar|Өзгерту|Modifier|Ändern|変更|Үзгәртү
 Включить|Enable|Activar|Қосу|Activer|Aktivieren|有効にする|Кабызу
-Отключить|Disable|Desactivar|Өшіру|Désactiver|Deaktivieren|無効にする|Сүндерү'''
+Отключить|Disable|Desactivar|Өшіру|Désactiver|Deaktivieren|無効にする|Сүндерү
+В режиме редактирования|Editing mode|Modo de edición|Өңдеу режимі|Mode édition|Bearbeitungsmodus|編集中|Үзгәртү режимы
+Несохранённые черновики|Unsaved drafts|Borradores sin guardar|Сақталмаған нобайлар|Brouillons non enregistrés|Ungespeicherte Entwürfe|未保存の下書き|Сакланмаган караламалар
+Убрать уведомление|Dismiss notification|Descartar notificación|Хабарландыруды жабу|Masquer la notification|Hinweis ausblenden|通知を閉じる|Белдерүне ябу
+Ваши черновики|Your drafts|Tus borradores|Сіздің нобайларыңыз|Vos brouillons|Ihre Entwürfe|あなたの下書き|Сезнең караламалар
+Все наряды|All work orders|Todas las órdenes|Барлық нарядтар|Tous les ordres de travail|Alle Arbeitsaufträge|すべての作業指示書|Барлык нарядлар
+У вас нет несохранённых черновиков.|You have no unsaved drafts.|No tienes borradores sin guardar.|Сақталмаған нобайларыңыз жоқ.|Vous n’avez aucun brouillon non enregistré.|Sie haben keine ungespeicherten Entwürfe.|未保存の下書きはありません。|Сакланмаган караламаларыгыз юк.'''
 
 BASE_NEW={}
 for row in NEW_DATA.splitlines():

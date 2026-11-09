@@ -110,6 +110,10 @@
   function render(raw) {
     state = typeof raw === "string" ? JSON.parse(raw) : raw;
     translatePage();
+    $("drafts-bar").hidden = !state.draftView || !state.allowed;
+    $("drafts-title").textContent = t("Ваши черновики");
+    $("all-orders").textContent = t("Все наряды");
+    document.querySelector(".filters-scroll").hidden = state.draftView;
     document.documentElement.dataset.theme = state.theme;
     document.documentElement.dataset.embedded = state.embedded ? "true" : "false";
     const fonts = state.appearance && state.appearance.fonts || {};

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import threading
 from PyQt5.QtCore import Qt,QTimer,pyqtSignal,QObject
-from PyQt5.QtWidgets import QFrame,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QScrollArea,QWidget,QMessageBox
+from PyQt5.QtWidgets import QFrame,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,QScrollArea,QWidget,QMessageBox,QToolButton
 from .heavy_ui import DiagnosticsCenterDialog
 from .analytics_ui import table,fill_table
 from .security import Permission,WORKSHOP_ROLES,split_roles
 from .workshops import allowed_workshops
 from .db import now_text
+from .i18n import tr
 
 
 class LiveDiagnosticsDialog(DiagnosticsCenterDialog):
@@ -88,11 +89,43 @@ class NotificationPopup(QFrame):
             empty=QLabel("Изменений Ваших нарядов другими пользователями пока нет.");empty.setWordWrap(True);self.rows.addWidget(empty)
         from .workshops import WORKSHOPS
         for n in items:
+            if n.get("kind") == "drafts":
+                self.rows.addWidget(self._draft_notice(n))
+                continue
             card=QFrame();card.setObjectName("NotificationCard");card.setStyleSheet("QFrame#NotificationCard{border:1px solid "+("#16B9B0" if not n["read_at"] else "#738097")+";border-radius:9px;padding:3px;}");l=QVBoxLayout(card)
             stamp=QLabel(("● " if not n["read_at"] else "")+WORKSHOPS[n["workshop_key"]]+" · "+n["created_at"]);stamp.setTextFormat(Qt.PlainText);stamp.setStyleSheet("font-size:10px;color:#16B9B0;border:0;");l.addWidget(stamp)
             text=QLabel(n["message"]);text.setTextFormat(Qt.PlainText);text.setWordWrap(True);text.setStyleSheet("border:0;");l.addWidget(text)
             button=QPushButton("Посмотреть версию "+n["version"]);button.setEnabled(int(n.get("id",0))<0 or self.owner.can(Permission.ORDERS_VIEW));button.clicked.connect(lambda _,notice=n:self.open_notice(notice));l.addWidget(button);self.rows.addWidget(card)
         self.rows.addStretch()
+
+    def _draft_notice(self, notice):
+        card = QFrame(self.content)
+        card.setObjectName("NotificationCard")
+        layout = QHBoxLayout(card)
+        count = len(notice["keys"])
+        open_list = QPushButton(f'{tr("Несохранённые черновики")} · ×{count}', card)
+        open_list.setObjectName("OpenDraftNotice")
+        open_list.setEnabled(self.owner.can(Permission.ORDERS_VIEW))
+        open_list.clicked.connect(self._open_drafts)
+        layout.addWidget(open_list, 1)
+        dismiss = QToolButton(card)
+        dismiss.setObjectName("DismissDraftNotice")
+        dismiss.setText("×")
+        dismiss.setToolTip(tr("Убрать уведомление"))
+        dismiss.setAccessibleName(dismiss.toolTip())
+        dismiss.clicked.connect(lambda: self._dismiss_drafts(notice))
+        layout.addWidget(dismiss)
+        return card
+
+    def _open_drafts(self):
+        self.close()
+        self.owner.show_draft_list()
+
+    def _dismiss_drafts(self, notice):
+        try:
+            self.owner.dismiss_draft_notice(notice)
+        except OSError as exc:
+            self.status.setText(str(exc))
     def read_all(self):
         try:
             for key in allowed_workshops(self.owner.user):mark_read(self.owner.workshop_manager,self.owner.user,key)

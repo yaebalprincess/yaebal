@@ -1315,7 +1315,10 @@ class DateRangeDialog(QDialog):
         row = QHBoxLayout(); today=QPushButton("Сегодня"); reset=QPushButton("Сбросить"); cancel=QPushButton("Отмена"); choose=QPushButton("Выбрать"); choose.setObjectName("PrimaryButton")
         today.clicked.connect(self._today); reset.clicked.connect(self._today); cancel.clicked.connect(self.reject); choose.clicked.connect(self.accept)
         row.addWidget(today); row.addWidget(reset); row.addStretch(); row.addWidget(cancel); row.addWidget(choose); root.addLayout(row)
-        self._refresh_marks(); _apply_modal_theme(self, parent)
+        self._refresh_marks()
+        _apply_modal_theme(self, parent)
+        from .liquid_style import style_range_calendar
+        style_range_calendar(self.calendar, _theme_of(self)[0])
 
     def _clicked(self, date):
         if not self._waiting_for_end:
@@ -1379,7 +1382,14 @@ class RC3WorkOrderDialog(HeavyWorkOrderDialog):
     def _build(self):
         self.setObjectName("WorkOrderDialog"); layout=QVBoxLayout(self);layout.setContentsMargins(16,14,16,14);layout.setSpacing(9)
         if self.order is not None and not self.view_only:
-            banner=QFrame();banner.setObjectName("EditModeBanner");bh=QHBoxLayout(banner);bh.setContentsMargins(14,6,14,6);lab=QLabel(f"✎ РЕЖИМ РЕДАКТИРОВАНИЯ · наряд № {self.order['info'].get('version','')}");lab.setObjectName("EditModeLabel");bh.addWidget(lab);bh.addStretch();layout.addWidget(banner)
+            banner = QFrame(self)
+            banner.setObjectName("EditModeBanner")
+            banner_layout = QHBoxLayout(banner)
+            banner_layout.setContentsMargins(10, 2, 10, 2)
+            label = QLabel("В режиме редактирования", banner)
+            label.setObjectName("EditModeLabel")
+            banner_layout.addWidget(label)
+            layout.addWidget(banner, 0, Qt.AlignRight)
         info_group=QGroupBox("Информация о наряде");info_group.setObjectName("OrderInfoGroup");form=QFormLayout(info_group);form.setContentsMargins(14,24,14,14);form.setVerticalSpacing(10)
         self.order_date=SmartDateEdit();self.order_date.setDate(QDate.currentDate());self.order_date.setMinimumWidth(250)
         self.shift=SmartComboBox();self.shift.setObjectName("ShiftTypeComboV31");self.shift.setMinimumWidth(470);self.shift.addItems(["Ночная","Дневная"]);self.shift.view().setMinimumWidth(540)
@@ -2160,7 +2170,7 @@ _RC4_OLD_APPLY_MODAL_THEME = _apply_modal_theme
 
 def _rc4_set_windows_titlebar_dark(widget, dark: bool) -> None:
     """Keep the native Windows caption in sync with the selected theme."""
-    if os.name != "nt" or widget is None:
+    if os.name != "nt" or widget is None or isinstance(widget, QFileDialog):
         return
     if not widget.isWindow() or not widget.isVisible() or widget.windowHandle() is None:
         return
@@ -3004,7 +3014,9 @@ class RC4WorkOrderDialog(RC3WorkOrderDialog):
     def has_changes(self) -> bool:
         if self.order is None:
             return True
-        return self.current_content_signature() != self._rc4_original_signature
+        separate_worker = self.separate_worker_check.isChecked()
+        return (self.current_content_signature() != self._rc4_original_signature
+                or separate_worker != bool(self.order["info"].get("separate_worker")))
 
     def _save_draft(self):
         try:
@@ -3101,41 +3113,54 @@ class RC4MainWindow(RC3MainWindow):
     def edit_order(self):
         ref = self._selected_ref()
         if isinstance(ref, str):
-            self._open_draft(Path(ref)); return
+            self._open_draft(Path(ref))
+            return
         order_id = ref if isinstance(ref, int) else None
-        if not order_id or not self.can(Permission.ORDERS_EDIT): return
-        if not self.db.is_latest_order(order_id):
-            warn(self,"Редактирование","Редактировать можно только последнюю версию наряда"); return
+        if not order_id or not self.can(Permission.ORDERS_EDIT):
+            return
         token = None
+        dialog = None
         try:
+            if not self.db.is_latest_order(order_id):
+                warn(self, "Редактирование", "Редактировать можно только последнюю версию наряда")
+                return
             token, owner = self.db.acquire_edit_lock(order_id, self.user)
             if not token:
-                warn(self,"Наряд уже редактируется",f"Пользователь: {owner.get('username')}\nКомпьютер: {owner.get('computer')}"); return
+                warn(self, "Наряд уже редактируется", f"Пользователь: {owner.get('username')}\nКомпьютер: {owner.get('computer')}")
+                return
             order = self.db.get_order(order_id)
-            dlg = RC4WorkOrderDialog(self.db,self.user,order=order,lock_token=token,parent=self)
-            try:
-                if dlg.exec_() == QDialog.Accepted:
-                    if not dlg.has_changes():
-                        dlg._delete_draft()
-                        info(self,"Наряд",f"Наряд № {order['info'].get('version','')} не изменён. Новая версия не создана.")
-                    else:
-                        data=dlg.get_data()
-                        new_id=self.db.save_order(
-                            self.user,data["order_date"],data["shift_type"],data["master_id"],
-                            data["department_id"],data["lines"],data["comment"],parent_id=order_id,separate_worker=bool(data.get("separate_worker",False)),
-                        )
-                        dlg._delete_draft(); version=self.db.get_order(new_id)["info"]["version"]
-                        info(self,"Наряд",f"Изменения сохранены как новая версия № {version}")
-                        self._auto_backup("order_edited")
-            finally:
-                dlg.stop_lock(); self.refresh_orders()
+            if order is None:
+                warn(self, "Редактирование", "Наряд больше недоступен.")
+                return
+            dialog = WorkOrderDialog(self.db, self.user, order=order, lock_token=token, parent=self)
+            if dialog.exec_() != QDialog.Accepted:
+                return
+            if not dialog.has_changes():
+                dialog._delete_draft()
+                info(self, "Наряд", f"Наряд № {order['info'].get('version', '')} не изменён. Новая версия не создана.")
+                return
+            data = dialog.get_data()
+            new_id = self.db.save_order(
+                self.user, data["order_date"], data["shift_type"], data["master_id"],
+                data["department_id"], data["lines"], data["comment"], parent_id=order_id,
+                separate_worker=bool(data.get("separate_worker", False)),
+            )
+            dialog._delete_draft()
+            version = self.db.get_order(new_id)["info"]["version"]
+            info(self, "Наряд", f"Изменения сохранены как новая версия № {version}")
+            self._auto_backup("order_edited")
         except StaleOrderError as exc:
-            warn(self,"Редактирование",str(exc))
+            warn(self, "Редактирование", str(exc))
         except Exception as exc:
+            error(self, "Редактирование", exc)
+        finally:
+            if dialog is not None:
+                dialog.stop_lock()
+                dialog.deleteLater()
+            elif token:
+                self.db.release_edit_lock(order_id, token)
             if token:
-                try:self.db.release_edit_lock(order_id,token)
-                except Exception:pass
-            error(self,"Редактирование",exc)
+                self.refresh_orders()
 
     def _build_admin_tab(self):
         tab = super()._build_admin_tab()
@@ -3350,10 +3375,10 @@ def _rc12_shared_drafts_dir(create: bool = False) -> Path:
     return path
 
 
-def _rc12_touch_draft_revision() -> None:
+def _rc12_touch_draft_revision(folder=None) -> None:
     """Notify other clients that the shared draft list changed."""
     try:
-        folder = _rc12_shared_drafts_dir(create=True)
+        folder = _rc12_shared_drafts_dir(create=True) if folder is None else folder
         target = folder / _RC12_DRAFT_REVISION
         tmp = folder / f"{_RC12_DRAFT_REVISION}.{os.getpid()}.tmp"
         tmp.write_text(str(time.time_ns()), encoding="ascii")
@@ -3670,11 +3695,16 @@ class RC12MainWindow(RC4MainWindow):
     def _open_draft(self, path: Path):
         try: payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception as exc: error(self, "Черновик", exc); return
-        dlg = RC12WorkOrderDialog(self.db, self.user, parent=self)
+        parent_id = payload.get("parent_order_id")
+        permission = Permission.ORDERS_EDIT if parent_id is not None else Permission.ORDERS_CREATE
+        if not self.can(permission):
+            warn(self, "Черновик", "Недостаточно прав для продолжения черновика.")
+            return
+        dlg = WorkOrderDialog(self.db, self.user, parent=self)
         dlg._rc12_draft_file = path
         dlg.load_draft_payload(payload)
         if dlg.exec_() == QDialog.Accepted:
-            data = dlg.get_data(); parent_id = payload.get("parent_order_id")
+            data = dlg.get_data()
             try:
                 oid = self.db.save_order(
                     self.user, data["order_date"], data["shift_type"], data["master_id"],
@@ -3683,6 +3713,7 @@ class RC12MainWindow(RC4MainWindow):
                 path.unlink(missing_ok=True); _rc12_touch_draft_revision(); dlg._delete_draft()
                 info(self, "Наряд", f"Наряд № {self.db.get_order(oid)['info']['version']} сохранён")
             except Exception as exc: error(self, "Наряд", exc)
+        dlg.deleteLater()
         self.refresh_orders()
 
     def delete_selected_draft(self):
@@ -3690,8 +3721,9 @@ class RC12MainWindow(RC4MainWindow):
         if not isinstance(ref, str): return
         if question(self, "Удаление черновика", "Удалить выбранный черновик?") != QMessageBox.Yes: return
         try:
-            Path(ref).unlink(missing_ok=True)
-            _rc12_touch_draft_revision()
+            path = Path(ref)
+            path.unlink(missing_ok=True)
+            _rc12_touch_draft_revision(path.parent)
             self.refresh_orders(); info(self, "Черновик", "Черновик удалён.")
         except Exception as exc: error(self, "Черновик", exc)
 
@@ -4080,7 +4112,7 @@ def _rc14_force_windows_titlebar(widget: QWidget, dark: bool) -> None:
     """Apply DWM dark/light frame immediately instead of waiting for activation."""
     # winId() creates a native window. Hidden QComboBox containers and tooltips
     # must never acquire one just because a page/theme changed.
-    if not widget.isWindow() or not widget.isVisible() or widget.windowHandle() is None:
+    if isinstance(widget, QFileDialog) or not widget.isWindow() or not widget.isVisible() or widget.windowHandle() is None:
         return
     if widget.windowType() in (Qt.Popup, Qt.ToolTip):
         return

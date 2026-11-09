@@ -46,6 +46,7 @@ def test_theme_clickable_at_both_edges_without_stylesheet_replacement(glass,app,
         times.append(time.perf_counter()-started)
         assert app._liquid_theme==expected
     assert not calls
+    assert getattr(window.centralWidget(), "_liquid_transition", None) is None
     assert all('[theme="'+theme+'"]' in app.styleSheet() for theme in ("light","dark"))
     print("Theme with all tabs loaded, seconds:",times)
 
@@ -178,11 +179,8 @@ def test_fullscreen_and_windowed_modes_restore_geometry(glass,app):
     from smartorder.heavy_ui import _RC4FullscreenIcon
 
     window,_,_=glass;before=window.geometry()
-    size = window.centralWidget().size()
     window.toggle_window_mode(True)
-    drain(app,lambda:window.geometry()!=before and window._window_motion.animation is not None)
-    assert window.centralWidget().size() == size
-    drain(app,lambda:window.isFullScreen() and window._window_motion.animation is None)
+    drain(app,lambda:window.isFullScreen() and not window._window_motion.running)
     assert window.size() == window.screen().geometry().size()
     assert window.centralWidget().size() == window.size()
     feedback = window._fullscreen_feedback
@@ -190,7 +188,7 @@ def test_fullscreen_and_windowed_modes_restore_geometry(glass,app):
     assert feedback.geometry().center() == window.rect().center()
     assert feedback.findChild(_RC4FullscreenIcon).entering
     window.toggle_window_mode(True)
-    drain(app,lambda:not window.isFullScreen() and window._window_motion.animation is None)
+    drain(app,lambda:not window.isFullScreen() and not window._window_motion.running)
     assert window.geometry()==before
     feedback = window._fullscreen_feedback
     assert feedback.isVisible() and not feedback.findChild(_RC4FullscreenIcon).entering

@@ -93,7 +93,9 @@ def _ensure_html_document(filename: str, content: str) -> Path | None:
 
 
 def ensure_user_guide_document() -> Path | None:
-    return _ensure_html_document("smartorder_kak_rabotat.html", USER_GUIDE_HTML)
+    from .guide_site import build_guide_site
+
+    return _ensure_html_document("smartorder_kak_rabotat.html", build_guide_site(USER_GUIDE_HTML))
 
 
 def ensure_troubleshooting_document() -> Path | None:
