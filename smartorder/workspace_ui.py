@@ -2,7 +2,8 @@
 from functools import lru_cache
 import json
 from pathlib import Path
-from PyQt5.QtCore import QEvent, QEasingCurve, QPropertyAnimation, QRectF, QSize, Qt
+from PyQt5.QtCore import QByteArray, QEvent, QEasingCurve, QPropertyAnimation, QRect, QRectF, QSize, Qt
+from PyQt5.QtSvg import QSvgRenderer
 from PyQt5.QtGui import QColor, QFontMetrics, QImageReader, QLinearGradient, QPainter, QPalette, QPixmap
 from PyQt5.QtWidgets import QDialog, QFrame, QLabel, QProgressBar, QPushButton, QVBoxLayout
 from .appearance import typography_qss, font_for
@@ -39,14 +40,69 @@ class EmptyTableMessage(QLabel):
         if search is not None:search.textChanged.connect(self.refresh)
         self.refresh()
     def refresh(self,*_):
-        import html
-        icon=resource_path("smartorder/glass/assets/empty-state.svg").as_uri()
         message=tr("По вашему запросу ничего не найдено." if self.search is not None and self.search.text().strip() else self.message)
-        self.setText(f'<div align="center"><img src="{icon}" width="96" height="96"><p>{html.escape(message)}</p></div>')
+        self.setText(message)
         self.setGeometry(self.parentWidget().rect().adjusted(16,8,-16,-8));self.setVisible(self.table.model().rowCount()==0);self.raise_()
+        self.update()
+    def paintEvent(self, event):
+        from .liquid_effects import theme_of
+        dark = theme_of(self) == "dark"
+        if getattr(self, "_icon_theme", None) != dark:
+            source = resource_path("smartorder/glass/assets/empty-state.svg").read_bytes()
+            if dark:source = source.replace(b"#7899b9", b"#a2bfdc")
+            self._vector_icon = QSvgRenderer(QByteArray(source), self)
+            self._icon_theme = dark
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+        painter.setFont(self.font())
+        bounds = self.fontMetrics().boundingRect(QRect(0,0,max(80,self.width()-32),400), Qt.AlignHCenter|Qt.TextWordWrap,self.text())
+        height = 96 + 18 + bounds.height()
+        top = max(0,(self.height()-height)//2)
+        self._vector_icon.render(painter,QRectF((self.width()-96)/2,top,96,96))
+        painter.setPen(QColor("#b1c6df" if dark else "#425f80"))
+        painter.drawText(QRect(16,top+114,max(0,self.width()-32),bounds.height()+2),Qt.AlignHCenter|Qt.TextWordWrap,self.text())
     def eventFilter(self,watched,event):
         if event.type() in (QEvent.Show,QEvent.Resize):self.refresh()
         return False
+
+
+class StartupPaintCover(QFrame):
+    """Opaque content until Chromium confirms the first populated frame."""
+    def __init__(self, parent, theme):
+        super().__init__(parent)
+        self.setObjectName("StartupPaintCover")
+        self.setProperty("plainSurface", True)
+        self.setAttribute(Qt.WA_OpaquePaintEvent)
+        self.color=QColor("#15273e" if theme=="dark" else "#dcebf7")
+        self.setGeometry(parent.rect())
+        parent.installEventFilter(self)
+        self.show();self.raise_()
+    def eventFilter(self, watched, event):
+        if event.type()==QEvent.Resize:self.setGeometry(watched.rect())
+        return False
+    def paintEvent(self, event):
+        painter=QPainter(self);painter.fillRect(self.rect(),self.color)
+
+
+def reveal_after_first_frame(window, loading, callback=None):
+    from PyQt5.QtCore import QTimer
+    from PyQt5 import sip
+    timer=QTimer(window);timer.setInterval(25)
+    def ready():
+        if sip.isdeleted(window) or getattr(window,"_live_closed",False):
+            timer.stop()
+            if not sip.isdeleted(loading):loading.close()
+            return
+        painted=getattr(window,"_glass_painted",True) or getattr(window,"_glass_error",False)
+        if not painted or getattr(window,"_orders_running",False):return
+        timer.stop();timer.deleteLater()
+        loading.fade_out()
+        window._startup_revealed=True
+        if callback:QTimer.singleShot(250,callback)
+    timer.timeout.connect(ready);timer.start()
+    window._startup_reveal_timer=timer
+    return timer
 
 class ActionAccessOverlay(QFrame):
     def __init__(self,parent):

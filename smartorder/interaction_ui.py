@@ -101,9 +101,11 @@ class RestrictedArea(QFrame):
 
 class WorkshopPopup(QFrame):
     def __init__(self,owner):
-        super().__init__(owner,Qt.Popup|Qt.FramelessWindowHint|Qt.NoDropShadowWindowHint)
+        super().__init__(owner)
         self.owner=owner;self._actions=[];self.setProperty("plainSurface",True);self.setObjectName("WorkshopPopup")
-        c=colors(owner.ui_settings.theme=="dark");self.setStyleSheet(f'QFrame#WorkshopPopup{{background:{c["table"]};border:1px solid {c["edge"]};border-radius:12px;}}QToolButton{{text-align:left;padding:9px 12px;border:0;background:transparent;color:{c["ink"]};}}QToolButton:hover{{background:{c["hover"]};}}QToolButton:disabled{{color:{c["disabled"]};}}QLabel{{background:transparent;color:{c["muted"]};}}')
+        c=colors(owner.ui_settings.theme=="dark");self.setStyleSheet(f'QFrame#WorkshopPopup{{background:{c["base"]};border:1px solid {c["line"]};border-radius:12px;}}QToolButton{{text-align:left;padding:9px 12px;border:0;background:transparent;color:{c["ink"]};}}QToolButton:hover{{background:{c["hover"]};}}QToolButton:disabled{{color:{c["disabled"]};}}QLabel{{background:transparent;color:{c["muted"]};}}')
+        self.setFocusPolicy(Qt.StrongFocus)
+        QApplication.instance().installEventFilter(self)
         layout=QVBoxLayout(self);layout.setContentsMargins(8,8,8,8);layout.setSpacing(2)
         header=QLabel(owner.user.username+" · "+" · ".join(tr(role) for role in owner.user.roles));header.setWordWrap(True);layout.addWidget(header)
         from .workshops import WORKSHOPS,allowed_workshops
@@ -117,14 +119,26 @@ class WorkshopPopup(QFrame):
     def actions(self):return self._actions
     def select(self,key):self.close();self.owner._switch_to_workshop(key)
     def popup(self,point):
-        self.adjustSize();screen=QApplication.screenAt(point) or QApplication.primaryScreen();available=screen.availableGeometry()
+        self.adjustSize();point=self.owner.mapFromGlobal(point);available=self.owner.rect().adjusted(8,8,-8,-8)
         x=max(available.left(),min(point.x(),available.right()-self.width()+1))
         y=point.y() if point.y()+self.height()<=available.bottom() else max(available.top(),point.y()-self.height()-self.owner.titlebar.badge.height())
-        self._target_position=QPoint(x,y);self.move(x,y);self.show();self.move(x,y)
+        self._target_position=QPoint(x,y);self.move(x,y);self.show();self.raise_();self.setFocus();self.move(x,y)
         QTimer.singleShot(0,self._anchor_after_layout)
     def _anchor_after_layout(self):
         from PyQt5 import sip
         if not sip.isdeleted(self) and self.isVisible():self.move(self._target_position)
+    def eventFilter(self, watched, event):
+        if not self.isVisible():return False
+        if event.type()==QEvent.KeyPress and event.key()==Qt.Key_Escape:
+            self.hide();return True
+        if watched is self.owner and event.type() in (QEvent.Move,QEvent.Resize,QEvent.Hide):self.hide()
+        if event.type()==QEvent.MouseButtonPress and hasattr(event,"globalPos"):
+            point=event.globalPos()
+            inside=QRect(self.mapToGlobal(QPoint()),self.size()).contains(point)
+            badge=self.owner.titlebar.badge
+            on_badge=QRect(badge.mapToGlobal(QPoint()),badge.size()).contains(point)
+            if not inside and not on_badge:self.hide()
+        return False
 
 
 def prepare_combo_popup(combo):

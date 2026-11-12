@@ -272,7 +272,6 @@ def main(boot_started: float | None = None) -> int:
             return 0
         session_user = login.user
         mark("login-accepted")
-        _show_splash_status(splash, app, "Загрузка рабочего окна…")
     else:
         session_user = SessionUser(
             id=0,
@@ -281,7 +280,6 @@ def main(boot_started: float | None = None) -> int:
             permissions=frozenset(DEFAULT_ROLE_PERMISSIONS.get("Администратор", set())),
         )
         mark("login-bypassed")
-        _show_splash_status(splash, app, "Загрузка рабочего окна…")
 
     from .workshops import allowed_workshops
     from .config import local_state_dir
@@ -296,10 +294,10 @@ def main(boot_started: float | None = None) -> int:
     workshop_loading=WorkshopLoadingDialog(workshop)
     workshop_loading.show();app.processEvents()
     window = MainWindow(startup_box["manager"].database(workshop,session_user), session_user, manager=startup_box["manager"])
-    workshop_loading.close();workshop_loading.deleteLater()
     app._smartorder_main_window = window
     mark("main-window-constructed")
     window.showMaximized()
+    workshop_loading.raise_()
     app._order_request_server.deliver()
     app.processEvents()
     try:
@@ -311,7 +309,8 @@ def main(boot_started: float | None = None) -> int:
             pass
     mark("main-window-shown")
     from .context_help import offer_training
-    QTimer.singleShot(650, lambda: offer_training(window))
+    from .workspace_ui import reveal_after_first_frame
+    reveal_after_first_frame(window, workshop_loading, lambda: offer_training(window))
 
     # Retention maintenance is deliberately outside the startup critical path.
     # It runs in a daemon thread after the UI is already usable, and the DB

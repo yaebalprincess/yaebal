@@ -83,7 +83,8 @@ def test_create_order_has_one_themed_first_show_without_secondary_windows(ui, ap
         assert dialog.property("theme") == theme
         def no_second_maximize():pytest.fail("Editor maximized after the first show")
         monkeypatch.setattr(dialog, "showMaximized", no_second_maximize)
-        assert dialog.order_date._popup.parent() is dialog.order_date
+        assert dialog.order_date._popup.parent() is dialog
+        assert not dialog.order_date._popup.isWindow()
         assert not dialog.order_date._popup.isVisible()
         dialog.show(); app.processEvents()
         assert dialog.isMaximized()

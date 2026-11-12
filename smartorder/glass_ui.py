@@ -104,7 +104,7 @@ class OrdersWebView(QWebEngineView):
         page = OrdersPage(self.profile, self)
         # The profile must outlive the page's private renderer during teardown.
         self.profile.setParent(page)
-        page.setBackgroundColor(QColor(Qt.transparent))
+        page.setBackgroundColor(QColor("#15273e" if owner.ui_settings.theme=="dark" else "#dcebf7"))
         from PyQt5.QtWebEngineWidgets import QWebEngineSettings
         for attribute in (QWebEngineSettings.JavascriptCanOpenWindows,
                           QWebEngineSettings.JavascriptCanAccessClipboard,
@@ -118,7 +118,9 @@ class OrdersWebView(QWebEngineView):
         page.setWebChannel(self.channel)
         self.loadFinished.connect(owner._glass_loaded)
         self.renderProcessTerminated.connect(lambda *_: owner._glass_failed())
-        self.load(QUrl.fromLocalFile(str((ASSET_ROOT / "index.html").resolve())))
+        url=QUrl.fromLocalFile(str((ASSET_ROOT / "index.html").resolve()))
+        url.setQuery("theme="+owner.ui_settings.theme)
+        self.load(url)
 
 
 class FlexibleStack(QStackedWidget):
@@ -166,6 +168,8 @@ class MainWindow(EnterpriseWindow):
         self._glass = OrdersWebView(self)
         self._glass_stack.addWidget(self._glass)
         self._glass_stack.setCurrentWidget(self._glass)
+        from .workspace_ui import StartupPaintCover
+        self._startup_cover = StartupPaintCover(self._glass_stack, self.ui_settings.theme)
         self.orders_table.report_model.modelReset.connect(self._glass_rows_changed)
         self.orders_table.itemSelectionChanged.connect(self._schedule_glass_state)
         history_model = self.info_users_list.model()
@@ -364,6 +368,7 @@ class MainWindow(EnterpriseWindow):
         self._glass_error = True
         self._glass_ready = False
         self._glass_stack.setCurrentWidget(self._native_orders)
+        if getattr(self,"_startup_cover",None) is not None:self._startup_cover.hide()
         QTimer.singleShot(0, lambda: QMessageBox.warning(
             self, "Отображение окна", "Не удалось загрузить стеклянное оформление. "
             "Открыт стандартный интерфейс. Проверьте установку PyQtWebEngine и файлы оформления."))
@@ -395,7 +400,10 @@ class MainWindow(EnterpriseWindow):
         if action=="painted":
             self._glass_painted=True
             if hasattr(self,"_initial_state_timer"):self._initial_state_timer.stop()
-            if self._glass is not None:self._glass.update()
+            if self._glass is not None:
+                self._glass.page().setBackgroundColor(QColor(Qt.transparent))
+                self._glass.update()
+            if getattr(self,"_startup_cover",None) is not None:self._startup_cover.hide()
             return
         if action not in ACTIONS or not isinstance(payload, dict):
             return
@@ -418,6 +426,11 @@ class MainWindow(EnterpriseWindow):
             self._schedule_glass_state()
 
     def _execute_glass_command(self, action, data):
+        tour=getattr(self,"_master_tour",None)
+        if tour is not None and tour.running and action in {"create","edit","open","view","history","delete","print","export","workshop","filter","date","date_range","tab"}:
+            if action=="create" and tour.key=="create" or action=="history" and tour.key=="history" or action=="tab" and tour.key=="administration" and data.get("index")==3:
+                tour.click_target()
+            return
         if action in {"select", "filter", "date", "date_range", "create", "edit", "export", "print", "delete", "open", "view", "history"}:
             if not self._orders_allowed() or not self.can(Permission.ORDERS_VIEW):
                 return
@@ -496,8 +509,8 @@ class MainWindow(EnterpriseWindow):
         elif action == "notifications":
             self.show_notifications()
         elif action == "help":
-            from .context_help import show_context_help
-            show_context_help(self)
+            from .context_help import show_training_start
+            show_training_start(self)
         elif action == "all_orders":
             self.show_draft_list(False)
         elif action == "minimize":
@@ -558,8 +571,6 @@ class MainWindow(EnterpriseWindow):
 
     def choose_workshop(self):
         super().choose_workshop()
-        if self._glass is not None and self._glass.isVisible() and self.workshop_menu.isVisible():
-            self.workshop_menu.move(self.mapToGlobal(QPoint(max(12, self.width() - 290), 104)))
 
     def show_notifications(self):
         super().show_notifications()

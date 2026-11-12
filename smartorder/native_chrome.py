@@ -8,6 +8,9 @@ def apply_frame(window, dark):
     import ctypes
     from ctypes import wintypes
     hwnd = int(window.winId())
+    signature = (hwnd, bool(dark))
+    if getattr(window, "_native_frame_signature", None) == signature:
+        return
     user32, dwm = ctypes.windll.user32, ctypes.windll.dwmapi
     class Margins(ctypes.Structure):
         _fields_ = [(name, ctypes.c_int) for name in ("left", "right", "top", "bottom")]
@@ -22,6 +25,34 @@ def apply_frame(window, dark):
         value = wintypes.DWORD(color)
         dwm.DwmSetWindowAttribute(wintypes.HWND(hwnd), attr, ctypes.byref(value), ctypes.sizeof(value))
     user32.SetWindowPos(wintypes.HWND(hwnd), None, 0, 0, 0, 0, 0x37)
+    window._native_frame_signature = signature
+
+
+def visible_title_geometry(rect, available, title_height=48):
+    """Keep a usable caption inside the chosen monitor's work area."""
+    from PyQt5.QtCore import QRect
+    result = QRect(rect)
+    grip = min(96, result.width(), available.width())
+    x = max(available.left() - result.width() + grip,
+            min(result.x(), available.right() - grip + 1))
+    y = max(available.top(), min(result.y(), available.bottom() - min(title_height, available.height()) + 1))
+    result.moveTopLeft(type(rect.topLeft())(x, y))
+    return result
+
+
+def keep_title_visible(window):
+    from PyQt5 import sip
+    from PyQt5.QtGui import QCursor
+    from PyQt5.QtWidgets import QApplication
+    if sip.isdeleted(window) or window.isMinimized() or window.isMaximized() or window.isFullScreen():
+        return
+    screen = QApplication.screenAt(QCursor.pos()) or window.screen() or QApplication.primaryScreen()
+    if screen is None:return
+    frame = window.frameGeometry()
+    title = getattr(window, "titlebar", None)
+    target = visible_title_geometry(frame, screen.availableGeometry(), title.height() if title else 48)
+    if target.topLeft() != frame.topLeft():
+        window.move(window.pos() + target.topLeft() - frame.topLeft())
 
 
 def native_event(window, message):
@@ -30,6 +61,10 @@ def native_event(window, message):
     import ctypes
     from ctypes import wintypes
     msg = wintypes.MSG.from_address(int(message))
+    if msg.message == 0x0232:  # WM_EXITSIZEMOVE: preserve Windows Snap, then keep the caption reachable.
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(0, lambda: keep_title_visible(window))
+        return None
     user32 = ctypes.windll.user32
     user32.IsZoomed.argtypes = [wintypes.HWND]
     user32.ScreenToClient.argtypes = [wintypes.HWND,ctypes.POINTER(wintypes.POINT)]

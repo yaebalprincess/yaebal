@@ -343,6 +343,9 @@ th{position:sticky;}
 .column-resizer:hover,.column-resizer:focus{background:rgba(7,129,255,.32);outline:none;}
 body.resizing-columns,body.resizing-columns *{cursor:col-resize!important;user-select:none!important;}
 .notification-button:active,.notification-button[aria-expanded="true"]{color:var(--blue);background:rgba(83,181,255,.23);}
+.notification-button{position:relative;width:36px;min-width:36px;height:34px;padding:0;}
+#notification-count{position:absolute;top:-4px;right:-3px;min-width:15px;height:15px;padding:1px 3px;margin:0;border-radius:8px;background:#087bfa;color:white;font-size:9px;line-height:13px;}
+#notification-count:empty{display:none;}
 
 .orders-top{position:relative;}
 .orders-top>.access-overlay{border-radius:15px;cursor:not-allowed;font-size:1.4rem;color:#7896b2;background:repeating-linear-gradient(135deg,#bdd4eb18 0,#bdd4eb18 1px,transparent 1px,transparent 15px),#e4f1fbbc;border:1px solid #b7d7f099;backdrop-filter:blur(2px);}

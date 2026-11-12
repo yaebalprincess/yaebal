@@ -74,7 +74,8 @@ def test_economist_restricted_region_notifications_and_workshop_anchor(economist
     window.show_notifications();app.processEvents();assert window.notification_popup.isVisible();window.notification_popup.close()
     window.choose_workshop();app.processEvents();popup=window.workshop_menu
     expected=window.titlebar.badge.mapToGlobal(QPoint(0,window.titlebar.badge.height()))
-    assert 0<=popup.y()-expected.y()<=6
+    assert not popup.isWindow()
+    assert 0<=popup.mapToGlobal(QPoint()).y()-expected.y()<=6
     assert all(action.isEnabled() for action in popup.actions());popup.close()
 
 
@@ -102,7 +103,8 @@ def test_order_footer_buttons_share_bottom_baseline(glass,app):
         assert dialog._aligned_footer
         names={"Добавить работников","Добавить работы","Удалить выбранных","Сохранить","Отмена","Выгрузить в Excel","Выгрузить в EXCEL"}
         buttons=[b for b in dialog._action_footer.findChildren(QPushButton) if b.text() in names]
-        assert len(buttons)>=6
+        assert len(buttons)==5
+        assert not any(b.text().startswith("Выгрузить") or b.text()=="Прямая печать" for b in dialog.findChildren(QPushButton))
         bottoms=[b.mapTo(dialog,QPoint(0,b.height())).y() for b in buttons]
         assert max(bottoms)-min(bottoms)<=2
         assert dialog.height()-max(bottoms)<55

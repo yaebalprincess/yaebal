@@ -4116,6 +4116,9 @@ def _rc14_force_windows_titlebar(widget: QWidget, dark: bool) -> None:
         return
     if widget.windowType() in (Qt.Popup, Qt.ToolTip):
         return
+    signature = (int(widget.winId()), bool(dark)) if os.name == "nt" else None
+    if signature is not None and getattr(widget, "_legacy_frame_signature", None) == signature:
+        return
     _rc4_set_windows_titlebar_dark(widget, dark)
     if os.name != "nt":
         return
@@ -4126,6 +4129,7 @@ def _rc14_force_windows_titlebar(widget: QWidget, dark: bool) -> None:
         ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0001|0x0002|0x0004|0x0010|0x0020)
         # RDW_INVALIDATE|RDW_UPDATENOW|RDW_FRAME|RDW_ALLCHILDREN
         ctypes.windll.user32.RedrawWindow(hwnd, None, None, 0x0001|0x0100|0x0400|0x0080)
+        widget._legacy_frame_signature = signature
         widget.update()
     except Exception:
         pass
@@ -6347,13 +6351,8 @@ class RC20WorkOrderDialog(RC18WorkOrderDialog):
     def _build(self):
         self.setProperty("fullWindowControls", True)
         super()._build()
-        self.export_current_btn = QPushButton("Выгрузить в Excel", self)
-        self.export_current_btn.setVisible(self.user.can(Permission.ORDERS_EXPORT))
-        self.export_current_btn.clicked.connect(self._export_current_order)
-        from .export_actions import ExportActions
-        self.export_actions = ExportActions(self.export_current_btn, self._print_current_order, self)
-        self.export_actions.setVisible(self.user.can(Permission.ORDERS_EXPORT))
-        self.layout().addWidget(self.export_actions, 0, Qt.AlignRight)
+        from .order_calendar import install_order_calendar
+        install_order_calendar(self.order_date)
         self.table.setColumnHidden(8, True)
         self.table.horizontalHeaderItem(10).setText("Оплата")
         self.table.horizontalHeaderItem(1).setText("Часы")

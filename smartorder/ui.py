@@ -10,7 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from PyQt5.QtCore import QDate, QObject, Qt, QTimer, pyqtSignal, QPropertyAnimation, QEasingCurve, QRect
-from PyQt5.QtGui import QFont, QMovie
+from PyQt5.QtGui import QColor, QFont, QMovie, QPalette
 from PyQt5.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDateEdit, QDialog,
     QDialogButtonBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QHeaderView,
@@ -646,6 +646,10 @@ class MainWindow(QMainWindow):
         if self.ui_settings.auto_theme:
             from .config import scheduled_theme
             self.ui_settings.theme = scheduled_theme()
+        palette = self.palette()
+        palette.setColor(QPalette.Window, QColor("#15273e" if self.ui_settings.theme == "dark" else "#dcebf7"))
+        self.setPalette(palette)
+        self.setAutoFillBackground(True)
         self._auto_backup_last = 0.0; self._auto_backup_running = False
         self.setWindowTitle(f"SmartOrder {APP_VERSION} — {user.username} ({user.role})")
         self.resize(1500, 900)

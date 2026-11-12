@@ -99,61 +99,22 @@
     popup.style.left = Math.max(8, Math.min(bounds.left, window.innerWidth - popup.offsetWidth - 8)) + "px";
   }
   function schedulePosition() { if (!positionFrame) positionFrame = requestAnimationFrame(position); }
-  function dateObject(value) { const a = value.split("-").map(Number); return new Date(Date.UTC(a[0], a[1] - 1, a[2])); }
-  function iso(date) { return date.getUTCFullYear() + "-" + String(date.getUTCMonth() + 1).padStart(2, "0") + "-" + String(date.getUTCDate()).padStart(2, "0"); }
-  function displayDate(value) { return value.split("-").reverse().join("."); }
-  function addDays(value, delta) { const d = dateObject(value); d.setUTCDate(d.getUTCDate() + delta); return iso(d); }
-  function renderCalendar() {
-    if (!calendar) return;
-    const first = new Date(Date.UTC(calendar.year, calendar.month, 1));
-    $("calendar-month").textContent = first.toLocaleDateString(({ru:"ru-RU",en:"en-US",es:"es-ES",kk:"kk-KZ",fr:"fr-FR",de:"de-DE",ja:"ja-JP",tt:"tt-RU"}[state.language]||"ru-RU"), {month: "long", year: "numeric", timeZone: "UTC"});
-    $("calendar-hint").textContent = window.SmartOrderI18n(calendar.waiting ? "Выберите конец периода или нажмите «Применить»" : "Выберите дату или начало периода");
-    $("calendar-period").textContent = calendar.start === calendar.end ? displayDate(calendar.start) : displayDate(calendar.start) + " — " + displayDate(calendar.end);
-    const monday = new Date(first); monday.setUTCDate(1 - ((first.getUTCDay() + 6) % 7));
-    const fragment = document.createDocumentFragment();
-    for (let index = 0; index < 42; index++) {
-      const day = new Date(monday); day.setUTCDate(day.getUTCDate() + index);
-      const value = iso(day), button = document.createElement("button");
-      button.type = "button"; button.dataset.calDate = value; button.textContent = day.getUTCDate();
-      button.tabIndex = value === calendar.focus ? 0 : -1;
-      button.classList.toggle("other-month", day.getUTCMonth() !== calendar.month);
-      button.classList.toggle("in-range", value > calendar.start && value < calendar.end);
-      button.classList.toggle("range-edge", value === calendar.start || value === calendar.end);
-      button.classList.toggle("today", value === state.filters.today);
-      button.setAttribute("aria-label", day.toLocaleDateString(({ru:"ru-RU",en:"en-US",es:"es-ES",kk:"kk-KZ",fr:"fr-FR",de:"de-DE",ja:"ja-JP",tt:"tt-RU"}[state.language]||"ru-RU"), {day: "numeric", month: "long", year: "numeric", timeZone: "UTC"}));
-      button.setAttribute("aria-pressed", value >= calendar.start && value <= calendar.end ? "true" : "false");
-      fragment.appendChild(button);
-    }
-    replace($("calendar-days"), fragment); schedulePosition();
-  }
-  function focusCalendar(value) {
-    calendar.focus = value;
-    const d = dateObject(value); calendar.month = d.getUTCMonth(); calendar.year = d.getUTCFullYear(); renderCalendar();
-    const button = $("calendar-days").querySelector('[data-cal-date="' + value + '"]');
-    if (button) button.focus({preventScroll: true});
-  }
+  const calendarEngine = window.SmartOrderCalendar($("glass-calendar"), {
+    translate:value=>window.SmartOrderI18n ? window.SmartOrderI18n(value) : value,
+    rendered:schedulePosition,
+    cancel:()=>close(true),
+    apply:value=>{close(true);send("date_range",value);}
+  });
   function showCalendar(button) {
     if (!state || button.disabled) return;
     if (opened === "calendar") { close(true); return; }
-    close(); opened = "calendar"; anchor = button;
-    const start = state.filters.dateStart || state.filters.today, end = state.filters.dateEnd || start;
-    const date = dateObject(start);
-    calendar = {start, end, year: date.getUTCFullYear(), month: date.getUTCMonth(), waiting: false, focus: start};
-    $("glass-calendar").hidden = false; anchor.setAttribute("aria-expanded", "true");
-    renderCalendar(); position();
-    requestAnimationFrame(() => { if (calendar) focusCalendar(calendar.focus); });
+    close(); opened="calendar"; anchor=button;
+    const start=state.filters.dateStart||state.filters.today;
+    $("glass-calendar").hidden=false;anchor.setAttribute("aria-expanded","true");
+    calendar=calendarEngine.open(start,state.filters.dateEnd||start,{single:false,today:state.filters.today,language:state.language});
+    position();requestAnimationFrame(()=>{if(calendar)calendarEngine.focus(calendar.focus);});
   }
-  function calendarAction(action) {
-    if (!calendar) return;
-    if (action === "cancel") { close(true); return; }
-    if (action === "apply") { const payload = {start: calendar.start, end: calendar.end}; close(true); send("date_range", payload); return; }
-    if (action === "today") {
-      calendar.start = calendar.end = state.filters.today; calendar.waiting = false;
-      focusCalendar(state.filters.today); return;
-    }
-    const d = new Date(Date.UTC(calendar.year, calendar.month + (action === "next" ? 1 : -1), 1));
-    calendar.year = d.getUTCFullYear(); calendar.month = d.getUTCMonth(); calendar.focus = iso(d); renderCalendar();
-  }
+  function calendarAction(action) {calendarEngine.action(action);}
   function update(current, sender) {
     state = current; dispatch = sender;
     for (const name of ["master", "shift", "department"]) {
@@ -178,10 +139,7 @@
     if (option && opened) { choose(Number(option.dataset.optionIndex)); return; }
     const day = event.target.closest("[data-cal-date]");
     if (day && calendar) {
-      const value = day.dataset.calDate;
-      if (!calendar.waiting) { calendar.start = calendar.end = value; calendar.waiting = true; }
-      else { const first = calendar.start; calendar.start = first < value ? first : value; calendar.end = first < value ? value : first; calendar.waiting = false; }
-      focusCalendar(value); return;
+      calendarEngine.pick(day.dataset.calDate); return;
     }
     const control = event.target.closest("[data-cal]");
     if (control) { calendarAction(control.dataset.cal); return; }
@@ -201,12 +159,7 @@
     if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); close(true); return; }
     if (event.key === "Tab" && opened !== "calendar") { close(true); return; }
     if (opened === "calendar") {
-      const day = target.closest("[data-cal-date]");
-      if (day && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
-        event.preventDefault(); event.stopImmediatePropagation();
-        focusCalendar(addDays(day.dataset.calDate, {ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7}[event.key]));
-      }
-      return;
+      calendarEngine.keydown(event);return;
     }
     const enabled = shown.map((o,i) => o.enabled !== false ? i : -1).filter(i => i >= 0);
     let next = active;

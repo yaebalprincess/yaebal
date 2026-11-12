@@ -1,0 +1,3 @@
+html,body{background:var(--startup-base,#dcebf7);overflow:hidden;}
+html[data-theme="dark"]{--startup-base:#15273e;}
+.calendar-popup{position:absolute;inset:8px;width:calc(100% - 16px);max-width:none;max-height:calc(100% - 16px);animation:none;box-shadow:none;}

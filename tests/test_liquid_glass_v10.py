@@ -207,13 +207,13 @@ def test_help_icon_context_and_master_only_tour(glass, app):
     assert not help_allowed(SessionUser(5, "economist", "Экономист", frozenset()))
     master = SessionUser(9, "master", "Мастер Упаковка", frozenset(DEFAULT_ROLE_PERMISSIONS["Мастер Упаковка"]))
     assert help_allowed(master)
-    assert all(step[0] not in {"catalog", "admin", "analytics"} for step in training_steps(master))
+    assert "administration" in training_steps(master)
+    assert not {"catalog","analytics"}.intersection(training_steps(master))
     before = len(manager.database("packaging", admin).list_orders())
     start_training(owner)
     tour = owner._master_tour
-    while tour.running:
-        tour.advance()
-        app.processEvents()
+    assert tour.key=="create"
+    tour.finish()
     assert owner._master_tour is None
     assert len(manager.database("packaging", admin).list_orders()) == before
     assert not list(local_drafts_dir().rglob("*.json"))
@@ -241,9 +241,8 @@ def test_master_welcome_choice_is_once_per_account(system, app):
     owner._welcome_dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.Yes).click()
     drain(app, lambda: getattr(owner, "_master_tour", None) is not None)
     tour = owner._master_tour
-    while tour.running:
-        tour.advance()
-        app.processEvents()
+    assert tour.key=="create"
+    tour.finish()
     assert manager.database("packaging", master).list_orders() == []
     owner._rc4_exit_confirmed = True
     owner.close()

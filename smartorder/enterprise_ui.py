@@ -122,17 +122,27 @@ class TitleBar(QFrame):
         self.title.setObjectName("WindowTitleLabel")
         self.title.setMinimumWidth(80);self.title.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Preferred)
         self.title.setToolTip(self.title.text());row.addWidget(self.title,1);row.addStretch()
-        self.bell=QPushButton("🔔");self.bell.setObjectName("NotificationBell");self.bell.setToolTip("Уведомления об изменениях Ваших нарядов");self.bell.clicked.connect(owner.show_notifications);self.bell.setVisible(owner.can(Permission.NOTIFICATIONS_VIEW));row.addWidget(self.bell)
-        from .context_help import help_allowed, show_context_help
+        self.bell=QPushButton(self);self.bell.setObjectName("NotificationBell");self.bell.setProperty("symbolIcon", "bell");self.bell.setIcon(symbol_icon("bell", owner.ui_settings.theme));self.bell.setToolTip("Уведомления об изменениях Ваших нарядов");self.bell.clicked.connect(owner.show_notifications);self.bell.setVisible(owner.can(Permission.NOTIFICATIONS_VIEW));row.addWidget(self.bell)
+        from .context_help import help_allowed, show_training_start
         self.help = QPushButton(self)
         self.help.setObjectName("ContextHelp")
         self.help.setProperty("symbolIcon", "book")
         self.help.setIcon(symbol_icon("book", owner.ui_settings.theme))
-        self.help.setToolTip("Руководство по разделу (F1)")
+        self.help.setToolTip("Обучение: как работать с нарядами?")
         self.help.setAccessibleName("Руководство")
-        self.help.clicked.connect(lambda: show_context_help(owner))
+        self.help.clicked.connect(lambda: show_training_start(owner))
         self.help.setVisible(help_allowed(owner.user))
         row.addWidget(self.help)
+        from PyQt5.QtCore import QSize
+        for button in (self.bell, self.help):
+            button.setFixedSize(36, 34)
+            button.setIconSize(QSize(20, 20))
+        self.notice_count = QLabel(self.bell)
+        self.notice_count.setObjectName("NotificationCount")
+        self.notice_count.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.notice_count.setAlignment(Qt.AlignCenter)
+        self.notice_count.setGeometry(21, 0, 15, 15)
+        self.notice_count.hide()
         # Keep the theme switch beside the account/workshop badge, where it
         # remains reachable at every content zoom level.
         owner.theme_caption.setObjectName("TitleThemeCaption")
@@ -155,6 +165,9 @@ QLabel{{color:{c['ink']};background:transparent;}}
 QLabel#TitleThemeCaption{{color:{c['muted']};padding-left:12px;padding-right:8px;}}
 QPushButton#UserWorkshopBadge{{color:{c['ink']};background:{c['field']};border:1px solid {c['edge']};border-radius:9px;padding:3px 10px;min-height:24px;}}
 QPushButton#UserWorkshopBadge:hover{{background:{c['hover']};border-color:#65aff5;}}
+QPushButton#NotificationBell,QPushButton#ContextHelp{{min-width:0;max-width:36px;min-height:0;max-height:34px;padding:0;border:1px solid {c['line']};border-radius:9px;background:{c['field']};}}
+QPushButton#NotificationBell:hover,QPushButton#ContextHelp:hover{{background:{c['hover']};}}
+QLabel#NotificationCount{{font-size:9px;font-weight:700;color:white;background:#0785ff;border:0;border-radius:7px;}}
 QToolButton#WindowControl,QToolButton#WindowClose{{border:0;background:transparent;padding:0;border-radius:6px;min-width:38px;max-width:38px;min-height:32px;max-height:32px;}}
 QToolButton#WindowControl:hover{{background:{c['hover']};}}
 QToolButton#WindowClose:hover{{background:#e04e62;color:white;}}
@@ -173,7 +186,10 @@ QToolButton#WindowClose:hover{{background:#e04e62;color:white;}}
             self.drag=event.globalPos()-self.owner.frameGeometry().topLeft()
     def mouseMoveEvent(self,event):
         if self.drag is not None and event.buttons()&Qt.LeftButton and not self.owner.isMaximized() and not self.owner.isFullScreen():self.owner.move(event.globalPos()-self.drag)
-    def mouseReleaseEvent(self,event):self.drag=None
+    def mouseReleaseEvent(self,event):
+        self.drag=None
+        from .native_chrome import keep_title_visible
+        keep_title_visible(self.owner)
 
 
 class WorkshopDialog(QDialog):
@@ -536,6 +552,8 @@ class MainWindow(RC18MainWindow):
         if workshop != self.workshop or not self.can(Permission.ORDERS_HISTORY):
             return
         dialog = QDialog(self)
+        from .help_surface import opaque_help
+        opaque_help(dialog, self.ui_settings.theme)
         dialog.setWindowTitle("История редактирования наряда")
         dialog.setObjectName("DetailedOrderHistory")
         dialog.setAttribute(Qt.WA_DeleteOnClose)
@@ -815,6 +833,23 @@ class MainWindow(RC18MainWindow):
 
     def _heavy_people_selection(self):
         super()._heavy_people_selection();self._reference_permissions("employees")
+
+    def create_order(self):
+        tour=getattr(self,"_master_tour",None)
+        if tour is not None and tour.running:
+            if tour.key=="create":tour.click_target()
+            return
+        return super().create_order()
+
+    def edit_order(self):
+        tour=getattr(self,"_master_tour",None)
+        if tour is not None and tour.running:return
+        return super().edit_order()
+
+    def delete_selected_draft(self):
+        tour=getattr(self,"_master_tour",None)
+        if tour is not None and tour.running:return
+        return super().delete_selected_draft()
 
     def _open_selected(self):
         if not self.can(Permission.ORDERS_VIEW):return
@@ -1237,6 +1272,7 @@ class MainWindow(RC18MainWindow):
 
     def choose_workshop(self):
         if getattr(self,"workshop_menu",None) is not None and self.workshop_menu.isVisible():self.workshop_menu.close();return
+        if getattr(self,"workshop_menu",None) is not None:self.workshop_menu.deleteLater()
         from .interaction_ui import WorkshopPopup
         self.workshop_menu=WorkshopPopup(self)
         self.workshop_menu.popup(self.titlebar.badge.mapToGlobal(self.titlebar.badge.rect().bottomLeft())+QPointF(0,4).toPoint())
@@ -1350,10 +1386,8 @@ class MainWindow(RC18MainWindow):
 
     def _render_notifications(self, error=""):
         count = self._notification_count
-        self.titlebar.bell.setText("🔔" + (f" {count}" if count else ""))
-        style = "QPushButton{border:1px solid "+("#ED71A7" if count else "#738097")+";border-radius:10px;padding:4px 10px;min-height:22px;font-size:14px;}QPushButton:hover{border-color:#16B9B0;}QPushButton:pressed{background:#263B55;}"
-        if self.titlebar.bell.styleSheet() != style:
-            self.titlebar.bell.setStyleSheet(style)
+        self.titlebar.notice_count.setText("9+" if count > 9 else str(count))
+        self.titlebar.notice_count.setVisible(count > 0)
         self.titlebar.bell.setToolTip("Не удалось обновить уведомления: "+error if error else f"Непрочитанных уведомлений: {count}")
         if self.notification_popup and self.notification_popup.isVisible():
             self.notification_popup.render(self._notification_items, error)

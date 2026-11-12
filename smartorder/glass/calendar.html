@@ -1,0 +1,8 @@
+<!doctype html><html lang="ru" data-theme="light"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self' qrc:; script-src 'self' qrc:; style-src 'self'; img-src 'self' data:; connect-src 'none'"><script src="bootstrap.js"></script><link rel="stylesheet" href="orders.css"><link rel="stylesheet" href="calendar-page.css"></head><body><svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg"><symbol id="i-left" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></symbol><symbol id="i-right" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></symbol></svg>  <section class="glass-popover calendar-popup" id="glass-calendar" role="dialog" aria-label="Выбор даты или периода">
+    <div class="calendar-heading"><button data-cal="previous" aria-label="Предыдущий месяц"><svg><use href="#i-left"/></svg></button><strong id="calendar-month"></strong><button data-cal="next" aria-label="Следующий месяц"><svg><use href="#i-right"/></svg></button></div>
+    <p class="calendar-hint" id="calendar-hint">Выберите дату или начало периода</p>
+    <div class="calendar-weekdays" aria-hidden="true"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div>
+    <div class="calendar-days" id="calendar-days"></div>
+    <div class="calendar-period" id="calendar-period"></div>
+    <div class="calendar-footer"><button data-cal="today">Сегодня</button><button data-cal="cancel">Отмена</button><button class="calendar-apply" data-cal="apply">Применить</button></div>
+  </section><script src="calendar.js"></script><script src="qrc:///qtwebchannel/qwebchannel.js"></script><script src="calendar-page.js"></script></body></html>

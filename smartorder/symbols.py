@@ -2,7 +2,7 @@
 from functools import lru_cache
 
 from PyQt5.QtCore import QPointF, QRectF, Qt
-from PyQt5.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PyQt5.QtGui import QColor, QIcon, QIconEngine, QPainter, QPainterPath, QPen, QPixmap
 
 WORKSHOP_SYMBOLS = {"smoking": "flame", "drying": "sun", "rennet": "flask",
                     "cheese": "circle", "adyghe": "circle", "packaging": "package"}
@@ -10,11 +10,36 @@ WORKSHOP_SYMBOLS = {"smoking": "flame", "drying": "sun", "rennet": "flask",
 
 @lru_cache(maxsize=48)
 def symbol_icon(name, theme="light"):
-    pixmap = QPixmap(48, 48)
-    pixmap.fill(Qt.transparent)
-    painter = QPainter(pixmap)
+    return QIcon(SymbolEngine(name, theme))
+
+
+class SymbolEngine(QIconEngine):
+    def __init__(self, name, theme):
+        super().__init__()
+        self.name, self.theme = name, theme
+
+    def clone(self):
+        return SymbolEngine(self.name, self.theme)
+
+    def paint(self, painter, rect, mode, state):
+        draw_symbol(painter, QRectF(rect), self.name, self.theme, mode)
+
+    def pixmap(self, size, mode, state):
+        pixmap = QPixmap(size)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        draw_symbol(painter, QRectF(pixmap.rect()), self.name, self.theme, mode)
+        painter.end()
+        return pixmap
+
+
+def draw_symbol(painter, rect, name, theme, mode=QIcon.Normal):
+    painter.save()
     painter.setRenderHint(QPainter.Antialiasing)
-    painter.scale(2, 2)
+    painter.translate(rect.topLeft())
+    painter.scale(rect.width() / 24, rect.height() / 24)
+    if mode == QIcon.Disabled:
+        painter.setOpacity(.45)
     painter.setPen(QPen(QColor("#b1c6df" if theme == "dark" else "#425f80"), 1.7,
                         Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
     painter.setBrush(Qt.NoBrush)
@@ -45,6 +70,11 @@ def symbol_icon(name, theme="light"):
         painter.drawEllipse(QRectF(8,2,8,8))
         path.moveTo(4,22); path.lineTo(4,19); path.cubicTo(4,10,20,10,20,19)
         path.lineTo(20,22); painter.drawPath(path)
+    elif name == "bell":
+        path.moveTo(5,17); path.lineTo(19,17); path.lineTo(17,14); path.lineTo(17,9)
+        path.cubicTo(17,2,7,2,7,9); path.lineTo(7,14); path.closeSubpath()
+        path.moveTo(10,21); path.quadTo(12,23,14,21)
+        painter.drawPath(path)
     elif name == "book":
         path.moveTo(12,5); path.cubicTo(9,2,5,2,2,4); path.lineTo(2,20)
         path.cubicTo(5,18,9,18,12,21); path.cubicTo(15,18,19,18,22,20)
@@ -57,5 +87,4 @@ def symbol_icon(name, theme="light"):
     else:
         painter.drawRoundedRect(QRectF(3,3,18,18),2,2)
         painter.drawRect(QRectF(7,3,10,6)); painter.drawRect(QRectF(7,14,10,7))
-    painter.end()
-    return QIcon(pixmap)
+    painter.restore()
