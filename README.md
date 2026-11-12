@@ -1,3 +1,15 @@
+# Smart Order · Liquid Glass v10
+
+- [Скачать SmartOrder v10 — ZIP исходников](https://github.com/yaebalprincess/yaebal/archive/refs/heads/smartorder-liquid-glass-v10.zip)
+- [Запуск, сборка и изменения v10](https://github.com/yaebalprincess/yaebal/tree/smartorder-liquid-glass-v10)
+- [Проверки и примеры экранов](https://github.com/yaebalprincess/yaebal/blob/smartorder-liquid-glass-v10/LIQUID_GLASS_V10_QA.md)
+
+Таблица наряда с переносом работ и сохранением ширины столбцов, подробная история изменений, руководство по F1 и обучение мастера. Кнопка выгрузки разделена на Excel и прямую печать. В справочниках под датами создания и изменения отображаются авторы. Круговая анимация темы отключена.
+
+В ZIP исходники, обновлённая инструкция и скрипты сборки Windows; готового EXE нет. Печатный PDF проверен, штатный диалог Windows и физический принтер в среде Linux не запускались.
+
+---
+
 # Smart Order · Liquid Glass v9
 
 - [Скачать SmartOrder v9 — ZIP исходников](https://github.com/yaebalprincess/yaebal/archive/refs/heads/smartorder-liquid-glass-v9.zip)
