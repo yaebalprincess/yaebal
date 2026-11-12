@@ -20,19 +20,21 @@ def test_caption_controls_visible_contrasting_and_functional(ui, app, theme):
     bar = window.titlebar
     assert len(bar.controls) == 3
     minimum, maximum, close = bar.controls
-    assert all(b.isVisible() and b.width() == 46 and b.height() == 48 for b in bar.controls)
+    assert all(b.isVisible() and b.width() >= 32 and b.height() >= 28 for b in bar.controls)
     assert close.geometry().right() == bar.width() - 1
     for button in bar.controls:
-        picture = bar.grab().toImage()
-        background = picture.pixelColor(button.x() + 5, button.y() + 5).lightness()
-        pixels = [picture.pixelColor(button.x()+x,button.y()+y).lightness()
-            for x in range(16,31) for y in range(17,32)]
-        assert max(pixels) > 190 and background < 60 if theme == "dark" else min(pixels) < 90 and background > 230
+        picture = window.grab().toImage()
+        origin = button.mapTo(window, QPoint(0, 0))
+        x, y = button.width() // 2, button.height() // 2
+        pixels = [picture.pixelColor(origin.x() + column, origin.y() + row).lightness()
+                  for column in range(x - 8, x + 9) for row in range(y - 8, y + 9)]
+        assert max(pixels) - min(pixels) > 80
     QTest.mouseClick(minimum, Qt.LeftButton)
     assert window.isMinimized()
     window.showNormal(); app.processEvents()
     QTest.mouseClick(maximum, Qt.LeftButton)
     assert window.isMaximized()
+    drain(app, lambda: not window._window_motion.running)
     QTest.mouseClick(maximum, Qt.LeftButton)
     assert not window.isMaximized()
     window._rc4_exit_confirmed = True

@@ -29,9 +29,9 @@ from .workshops import WORKSHOPS, allowed_workshops
 
 log = logging.getLogger(__name__)
 ASSET_ROOT = resource_path("smartorder/glass")
-ACTIONS = frozenset({"ready", "painted", "select", "filter", "date", "date_range", "create", "edit",
+ACTIONS = frozenset({"ready", "painted", "select", "filter", "date", "date_range", "create", "edit", "print",
                      "export", "delete", "open", "view", "history", "tab",
-                     "columns", "theme", "zoom", "refresh", "workshop", "notifications", "all_orders",
+                     "columns", "theme", "zoom", "refresh", "workshop", "notifications", "help", "all_orders",
                      "minimize", "maximize", "close", "move", "resize", "fullscreen"})
 
 
@@ -264,7 +264,7 @@ class MainWindow(EnterpriseWindow):
             self._schedule_glass_state()
 
     def _glass_buttons(self):
-        return {"create": self.create_order_btn, "edit": self.edit_order_btn,
+        return {"create": self.create_order_btn, "edit": self.edit_order_btn, "print": self.print_order_btn,
                 "export": self.export_order_btn, "delete": self.delete_draft_btn}
 
     def _glass_status(self):
@@ -334,6 +334,7 @@ class MainWindow(EnterpriseWindow):
             "statusTip": self.orders_table.toolTip() or status_tip,
             "notifications": self._notification_count,
             "showNotifications": not self.titlebar.bell.isHidden(),
+            "showHelp": not self.titlebar.help.isHidden(),
             "workshopEnabled": self.titlebar.badge.isEnabled(),
             "maximized": self.isMaximized() or self.isFullScreen(),
             "fullscreen": self.isFullScreen()
@@ -400,7 +401,7 @@ class MainWindow(EnterpriseWindow):
             return
         if self._glass_busy and action not in {"minimize", "move", "resize"}:
             return
-        native = action in {"create", "edit", "export", "delete", "open", "view", "date", "history"}
+        native = action in {"create", "edit", "export", "print", "delete", "open", "view", "date", "history"}
         if native:
             self._glass_busy = True
             self._publish_glass_state()
@@ -417,7 +418,7 @@ class MainWindow(EnterpriseWindow):
             self._schedule_glass_state()
 
     def _execute_glass_command(self, action, data):
-        if action in {"select", "filter", "date", "date_range", "create", "edit", "export", "delete", "open", "view", "history"}:
+        if action in {"select", "filter", "date", "date_range", "create", "edit", "export", "print", "delete", "open", "view", "history"}:
             if not self._orders_allowed() or not self.can(Permission.ORDERS_VIEW):
                 return
         if action == "select":
@@ -448,7 +449,7 @@ class MainWindow(EnterpriseWindow):
             first, last = QDate.fromString(start, "yyyy-MM-dd"), QDate.fromString(end, "yyyy-MM-dd")
             if first.isValid() and last.isValid():
                 self.order_filter_date.setDateRange(first, last)
-        elif action in {"edit", "export", "delete", "open", "view"}:
+        elif action in {"edit", "export", "print", "delete", "open", "view"}:
             # Commands carry a stable row handle, never a potentially stale index.
             if not self._select_glass_row(data.get("key")) or self._selected_ref() is None:
                 return
@@ -460,6 +461,8 @@ class MainWindow(EnterpriseWindow):
                 self.edit_order()
             elif action == "export" and self.can(Permission.ORDERS_EXPORT) and self.export_order_btn.isEnabled():
                 self.export_order()
+            elif action == "print" and self.can(Permission.ORDERS_EXPORT) and self.print_order_btn.isEnabled():
+                self.print_order()
             elif action == "delete" and self.delete_draft_btn.isEnabled() and not self.user.has_any_role(ACCOUNTING_ROLES):
                 self.delete_selected_draft()
         elif action == "create" and self.can(Permission.ORDERS_CREATE):
@@ -492,6 +495,9 @@ class MainWindow(EnterpriseWindow):
                 self._switch_to_workshop(key)
         elif action == "notifications":
             self.show_notifications()
+        elif action == "help":
+            from .context_help import show_context_help
+            show_context_help(self)
         elif action == "all_orders":
             self.show_draft_list(False)
         elif action == "minimize":

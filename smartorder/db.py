@@ -1042,6 +1042,27 @@ class Database:
         return stats
 
     # ---------- references ----------
+    def _ensure_reference_authors(self):
+        if getattr(self, "_reference_authors_ready", False):
+            return
+        with self.write_conn() as conn:
+            for table in ("employees", "departments", "work_types"):
+                self._add_column(conn, table, "created_by", "TEXT")
+                self._add_column(conn, table, "updated_by", "TEXT")
+        self._reference_authors_ready = True
+
+    def reference_audit(self, kind):
+        tables = {"employee": "employees", "department": "departments", "work_type": "work_types"}
+        table = tables[kind]
+        def load():
+            with self.read_conn() as conn:
+                columns = self._columns(conn, table)
+                created = "created_by" if "created_by" in columns else "''"
+                updated = "updated_by" if "updated_by" in columns else "''"
+                return conn.execute(f"SELECT id,{created},{updated} FROM {table}").fetchall()
+        return {int(row[0]): (str(row[1] or ""), str(row[2] or ""))
+                for row in self._cached(table + ":authors", load)}
+
     def get_employees(self, is_master: bool | None = None) -> list[sqlite3.Row]:
         key = f"employees:{is_master}"
         def loader():
@@ -1057,20 +1078,22 @@ class Database:
         return self._cached(key, loader)
 
     def add_employee(self, actor: SessionUser, name: str, is_master: bool = False) -> int:
+        self._ensure_reference_authors()
         name = name.strip()
         with self.write_conn() as conn:
             cur = conn.execute(
-                "INSERT INTO employees(name,is_master,registration_date) VALUES(?,?,?)",
-                (name, 1 if is_master else 0, now_text()),
+                "INSERT INTO employees(name,is_master,registration_date,created_by) VALUES(?,?,?,?)",
+                (name, 1 if is_master else 0, now_text(), actor.username),
             )
             self._audit_conn(conn, actor.username, "Добавил", "Мастер" if is_master else "Сотрудник", name, "")
         self.invalidate_cache("employees")
         return int(cur.lastrowid)
 
     def update_employee(self, actor: SessionUser, employee_id: int, name: str) -> None:
+        self._ensure_reference_authors()
         name = name.strip()
         with self.write_conn() as conn:
-            conn.execute("UPDATE employees SET name=?,edit_date=? WHERE id=?", (name, now_text(), employee_id))
+            conn.execute("UPDATE employees SET name=?,edit_date=?,updated_by=? WHERE id=?", (name, now_text(), actor.username, employee_id))
             self._audit_conn(conn, actor.username, "Изменил", "Сотрудник", name, f"id={employee_id}")
         self.invalidate_cache("employees")
 
@@ -1119,17 +1142,19 @@ class Database:
         return self._cached("departments", loader)
 
     def add_department(self, actor: SessionUser, name: str) -> int:
+        self._ensure_reference_authors()
         with self.write_conn() as conn:
             cur = conn.execute(
-                "INSERT INTO departments(name,registration_date) VALUES(?,?)", (name.strip(), now_text())
+                "INSERT INTO departments(name,registration_date,created_by) VALUES(?,?,?)", (name.strip(), now_text(), actor.username)
             )
             self._audit_conn(conn, actor.username, "Добавил", "Подразделение", name.strip(), "")
         self.invalidate_cache("departments")
         return int(cur.lastrowid)
 
     def update_department(self, actor: SessionUser, department_id: int, name: str) -> None:
+        self._ensure_reference_authors()
         with self.write_conn() as conn:
-            conn.execute("UPDATE departments SET name=?,edit_date=? WHERE id=?", (name.strip(), now_text(), department_id))
+            conn.execute("UPDATE departments SET name=?,edit_date=?,updated_by=? WHERE id=?", (name.strip(), now_text(), actor.username, department_id))
             self._audit_conn(conn, actor.username, "Изменил", "Подразделение", name.strip(), f"id={department_id}")
         self.invalidate_cache("departments")
 
@@ -1174,6 +1199,7 @@ class Database:
             self._audit_conn(conn, actor.username, "Изменена единица ФАКТ", "work_type", str(work_id), "Единица: " + unit)
 
     def add_work_type(self, actor: SessionUser, name: str, code: str, price) -> int:
+        self._ensure_reference_authors()
         name = str(name or "").strip()
         code = str(code or "").strip()
         price_value = float(str(price).replace(",", "."))
@@ -1188,8 +1214,8 @@ class Database:
             if same_code:
                 raise DatabaseError(f"Код работы «{code}» уже используется")
             cur = conn.execute(
-                "INSERT INTO work_types(name,code,price,registration_date,is_favorite) VALUES(?,?,?,?,0)",
-                (name, code, price_value, stamp),
+                "INSERT INTO work_types(name,code,price,registration_date,is_favorite,created_by) VALUES(?,?,?,?,0,?)",
+                (name, code, price_value, stamp, actor.username),
             )
             work_id = int(cur.lastrowid)
             conn.execute(
@@ -1201,6 +1227,7 @@ class Database:
         return work_id
 
     def update_work_type(self, actor: SessionUser, work_id: int, name: str, code: str, price) -> None:
+        self._ensure_reference_authors()
         name = str(name or "").strip()
         code = str(code or "").strip()
         price_value = float(dec(price) or 0)
@@ -1216,8 +1243,8 @@ class Database:
                 raise DatabaseError(f"Код работы «{code}» уже используется")
             old = conn.execute("SELECT price FROM work_types WHERE id=?", (work_id,)).fetchone()
             conn.execute(
-                "UPDATE work_types SET name=?,code=?,price=?,edit_date=? WHERE id=?",
-                (name, code, price_value, stamp, work_id),
+                "UPDATE work_types SET name=?,code=?,price=?,edit_date=?,updated_by=? WHERE id=?",
+                (name, code, price_value, stamp, actor.username, work_id),
             )
             if old is None or float(old[0]) != price_value:
                 conn.execute(
@@ -1262,14 +1289,15 @@ class Database:
         return result
 
     def import_work_types(self, actor: SessionUser, rows: Iterable[tuple[str, str, float]]) -> tuple[int, int]:
+        self._ensure_reference_authors()
         stamp = now_text()
         added = dup = 0
         with self.write_conn() as conn:
             for name, code, price in rows:
                 try:
                     cur = conn.execute(
-                        "INSERT INTO work_types(name,code,price,registration_date) VALUES(?,?,?,?)",
-                        (name.strip(), code.strip(), float(price), stamp),
+                        "INSERT INTO work_types(name,code,price,registration_date,created_by) VALUES(?,?,?,?,?)",
+                        (name.strip(), code.strip(), float(price), stamp, actor.username),
                     )
                     conn.execute(
                         "INSERT INTO work_type_prices(work_type_id,price,valid_from,changed_by) VALUES(?,?,?,?)",
@@ -1283,6 +1311,7 @@ class Database:
         return added, dup
 
     def import_people(self, actor: SessionUser, names: Iterable[str], is_master: bool) -> tuple[int, int]:
+        self._ensure_reference_authors()
         stamp = now_text()
         existing = {str(r[1]).strip().casefold() for r in self.get_employees(is_master)}
         added = dup = 0
@@ -1295,8 +1324,8 @@ class Database:
                     dup += 1
                     continue
                 conn.execute(
-                    "INSERT INTO employees(name,is_master,registration_date) VALUES(?,?,?)",
-                    (name, 1 if is_master else 0, stamp),
+                    "INSERT INTO employees(name,is_master,registration_date,created_by) VALUES(?,?,?,?)",
+                    (name, 1 if is_master else 0, stamp, actor.username),
                 )
                 existing.add(name.casefold())
                 added += 1
@@ -1305,6 +1334,7 @@ class Database:
         return added, dup
 
     def import_departments(self, actor: SessionUser, names: Iterable[str]) -> tuple[int, int]:
+        self._ensure_reference_authors()
         stamp = now_text()
         added = dup = 0
         cleaned = [str(n or "").strip() for n in names if str(n or "").strip()]
@@ -1315,7 +1345,7 @@ class Database:
                 if key in existing:
                     dup += 1
                     continue
-                conn.execute("INSERT INTO departments(name,registration_date) VALUES(?,?)", (name, stamp))
+                conn.execute("INSERT INTO departments(name,registration_date,created_by) VALUES(?,?,?)", (name, stamp, actor.username))
                 existing.add(key); added += 1
             if added:
                 self._audit_conn(conn, actor.username, "Импортировал", "Подразделения", f"Добавлено: {added}", f"Дубликаты: {dup}")
@@ -1746,6 +1776,7 @@ class Database:
             src.close()
             dst.close()
         self.invalidate_cache()
+        self._reference_authors_ready = False
         self._invalidate_local_compat_marker()
         self._ensure_schema()
         self._write_local_compat_marker()

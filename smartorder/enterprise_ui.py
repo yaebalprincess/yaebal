@@ -123,6 +123,16 @@ class TitleBar(QFrame):
         self.title.setMinimumWidth(80);self.title.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Preferred)
         self.title.setToolTip(self.title.text());row.addWidget(self.title,1);row.addStretch()
         self.bell=QPushButton("🔔");self.bell.setObjectName("NotificationBell");self.bell.setToolTip("Уведомления об изменениях Ваших нарядов");self.bell.clicked.connect(owner.show_notifications);self.bell.setVisible(owner.can(Permission.NOTIFICATIONS_VIEW));row.addWidget(self.bell)
+        from .context_help import help_allowed, show_context_help
+        self.help = QPushButton(self)
+        self.help.setObjectName("ContextHelp")
+        self.help.setProperty("symbolIcon", "book")
+        self.help.setIcon(symbol_icon("book", owner.ui_settings.theme))
+        self.help.setToolTip("Руководство по разделу (F1)")
+        self.help.setAccessibleName("Руководство")
+        self.help.clicked.connect(lambda: show_context_help(owner))
+        self.help.setVisible(help_allowed(owner.user))
+        row.addWidget(self.help)
         # Keep the theme switch beside the account/workshop badge, where it
         # remains reachable at every content zoom level.
         owner.theme_caption.setObjectName("TitleThemeCaption")
@@ -399,6 +409,14 @@ class MainWindow(RC18MainWindow):
         old.hide();old.deleteLater();self.orders_table=view
         from .workspace_ui import EmptyTableMessage
         self.native_empty_orders=EmptyTableMessage(view,"Для начала работы создайте наряд.")
+        from .export_actions import ExportActions
+        actions_host = self.export_order_btn.parentWidget()
+        position = actions_host._widgets.index(self.export_order_btn)
+        self.export_actions = ExportActions(self.export_order_btn, self.print_order, actions_host)
+        actions_host._widgets[position] = self.export_actions
+        actions_host._columns = 0
+        actions_host._relayout()
+        self.print_order_btn = self.export_actions.print
 
         self.draft_bar = QFrame(view.parentWidget())
         self.draft_bar.setObjectName("GlassPanel")
@@ -500,6 +518,40 @@ class MainWindow(RC18MainWindow):
             who=rec['edited_by'] or 'Система';when=rec['edit_date'] or rec['registration_date']
             item=QListWidgetItem(("Создал" if index==0 else "Редактировал")+": "+who+(" · "+when if when else ""))
             item.setData(Qt.UserRole,rec);self.info_users_list.addItem(item)
+
+    def _show_history_details(self, item=None):
+        if not self.can(Permission.ORDERS_HISTORY):
+            return
+        identity = self._selected_order_id()
+        if identity is None:
+            return
+        record = item.data(Qt.UserRole) if isinstance(item, QListWidgetItem) else None
+        revision = record.get("id") if isinstance(record, dict) else None
+        db, workshop = self.db, self.workshop
+        from .order_history import history_html
+        self._read_section("history_details", lambda: (workshop, history_html(db, identity, revision)))
+
+    def _apply_history_details(self, data):
+        workshop, html = data
+        if workshop != self.workshop or not self.can(Permission.ORDERS_HISTORY):
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("История редактирования наряда")
+        dialog.setObjectName("DetailedOrderHistory")
+        dialog.setAttribute(Qt.WA_DeleteOnClose)
+        dialog.setWindowModality(Qt.ApplicationModal)
+        dialog.resize(840, 620)
+        layout = QVBoxLayout(dialog)
+        body = QTextBrowser(dialog)
+        body.setOpenExternalLinks(False)
+        body.setHtml(html)
+        layout.addWidget(body, 1)
+        box = QDialogButtonBox(QDialogButtonBox.Close, dialog)
+        box.button(QDialogButtonBox.Close).setText("Закрыть")
+        box.rejected.connect(dialog.reject)
+        layout.addWidget(box)
+        self._history_details_dialog = dialog
+        dialog.show()
 
     def _rc12_watch_tick(self):
         if not hasattr(self,"_live_signals") or self._live_closed or self._rc12_watch_running:return
@@ -606,6 +658,8 @@ class MainWindow(RC18MainWindow):
         self._update_permission_controls()
         self._enterprise_building=False
         self.zoom.sliderReleased.connect(self._rc18_commit_zoom)
+        from .context_help import install_help
+        install_help(self)
 
     def resizeEvent(self,event):
         super().resizeEvent(event)
@@ -807,8 +861,23 @@ class MainWindow(RC18MainWindow):
             try:self.workshop_manager.require(self.user,code);callback()
             except Exception as exc:QMessageBox.warning(self,tr("Недоступно"),str(exc))
 
+    def print_order(self):
+        from .order_printing import request_print
+        try:
+            self.workshop_manager.require(self.user, Permission.ORDERS_EXPORT)
+            identity = self._selected_order_id()
+            if identity is not None:
+                order = self.db.get_order(identity)
+                if order is not None:
+                    request_print(order, self)
+        except Exception as exc:
+            QMessageBox.warning(self, tr("Прямая печать"), str(exc))
+
     def _update_permission_controls(self):
         if not hasattr(self,"tabs"):return
+        if hasattr(self, "titlebar"):
+            from .context_help import help_allowed
+            self.titlebar.help.setVisible(help_allowed(self.user) and getattr(self, "_account_active", True))
         from .interaction_ui import RestrictedArea
         previous=self.tabs.currentIndex();blocked=self.tabs.blockSignals(True)
         for index,permission in enumerate((Permission.ORDERS_VIEW,Permission.CATALOG_VIEW,Permission.EMPLOYEES_VIEW,Permission.ADMIN_VIEW,Permission.ANALYTICS_VIEW)):
@@ -1025,6 +1094,29 @@ class MainWindow(RC18MainWindow):
         self.work_empty=EmptyTableMessage(self.work_table,"Для начала работы добавьте номенклатуру или загрузите её из Excel.",self.work_search)
         return self._align_reference_actions(tab)
 
+    def refresh_work_types(self):
+        if not hasattr(self, "work_table"):
+            return
+        self.work_table.setColumnCount(5)
+        super().refresh_work_types()
+        recent = bool(getattr(self, "_show_recent_deleted_work", False))
+        self.work_table.horizontalHeaderItem(3).setText("Дата регистрации")
+        self.work_table.setHorizontalHeaderItem(4, heavy_ui.make_item("Удалено" if recent else "Дата редактирования"))
+        source = self.db.list_recent_deleted_work_types(30) if recent else self.db.get_work_types()
+        records = {int(record[0]): record for record in source}
+        dates = {int(row[0]): row[6] if recent else row[5] for row in source}
+        for row in range(self.work_table.rowCount()):
+            identity = self.work_table.item(row, 0).data(Qt.UserRole)
+            if recent:
+                original = records.get(identity)
+                self.work_table.item(row, 3).setText(str(original[4] or "") if original else "")
+            self.work_table.setItem(row, 4, heavy_ui.make_item(dates.get(identity) or ""))
+        from .reference_audit_ui import decorate_references
+        decorate_references(self, self.work_table, "work_type", 3, 4, recent)
+        from PyQt5.QtWidgets import QHeaderView
+        for column in (3, 4):
+            self.work_table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeToContents)
+
     def _build_employees_tab(self):
         tab=super()._build_employees_tab()
         from .workspace_ui import EmptyTableMessage
@@ -1033,6 +1125,10 @@ class MainWindow(RC18MainWindow):
 
     def refresh_people(self):
         super().refresh_people()
+        if hasattr(self, "people_table"):
+            from .reference_audit_ui import decorate_references
+            kind = "department" if self._people_mode() == "department" else "employee"
+            decorate_references(self, self.people_table, kind, 1, 2, bool(getattr(self, "_show_recent_deleted_people", False)))
         from .i18n import apply_widget
         for name in ("person_form_label","person_name","person_search","people_results_label"):
             widget=getattr(self,name,None)

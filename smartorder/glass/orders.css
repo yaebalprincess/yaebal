@@ -310,6 +310,9 @@ body { font-family: var(--font-body-family, "Segoe UI"), sans-serif; font-size: 
 .filter-label { font-family: inherit; font-size: inherit; }
 
 .order-actions{position:relative;min-height:44px;}
+.export-split{display:flex;min-width:0;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
+.export-split .action-button{flex:1;width:50%;min-width:0;border:0;border-radius:0;white-space:normal;}
+.export-split .action-button:first-child{border-right:1px solid var(--line);}
 .order-actions .access-overlay{border-radius:9px;font-size:1.1rem;}
 /* Use individual offsets for Qt WebEngine builds that predate CSS inset. */
 .empty-orders {

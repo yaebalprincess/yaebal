@@ -31,12 +31,7 @@ def _cell(ref: str, value, style: int = 0, number: bool = False) -> str:
     return f'<c r="{ref}" t="inlineStr"{style_attr}><is><t>{escape(str(value))}</t></is></c>'
 
 
-def export_order_xlsx(path: str | Path, order: dict) -> Path:
-    path = Path(path)
-    if path.suffix.lower() != ".xlsx":
-        path = path.with_suffix(".xlsx")
-    path.parent.mkdir(parents=True, exist_ok=True)
-
+def order_rows(order: dict):
     info = order["info"]
     lines: list[OrderLine] = order["lines"]
     headers = [
@@ -127,6 +122,18 @@ def export_order_xlsx(path: str | Path, order: dict) -> Path:
                 row[0] = ""
             export_rows.append((row, False))
             last_key = key if has_employee else None
+
+    return headers, export_rows, totals
+
+
+def export_order_xlsx(path: str | Path, order: dict) -> Path:
+    path = Path(path)
+    if path.suffix.lower() != ".xlsx":
+        path = path.with_suffix(".xlsx")
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    info = order["info"]
+    headers, export_rows, totals = order_rows(order)
 
     sheet_rows: list[str] = []
     r = 1

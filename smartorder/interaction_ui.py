@@ -204,6 +204,9 @@ def align_order_footer(dialog):
     if getattr(dialog,"_aligned_footer",False):return
     names={"Добавить работников","Добавить работы","Удалить выбранных","Выгрузить в Excel","Выгрузить в EXCEL"}
     buttons=[button for button in dialog.findChildren(QPushButton) if button.text() in names]
+    export_group = getattr(dialog, "export_actions", None)
+    if export_group is not None:
+        buttons = [button for button in buttons if button is not dialog.export_current_btn]
     boxes=[box for box in dialog.findChildren(QDialogButtonBox) if any(b.text() in {"Сохранить","Отмена"} for b in box.buttons())]
     if not buttons or not boxes:return
     def detach(layout,widget):
@@ -212,7 +215,7 @@ def align_order_footer(dialog):
             child=layout.itemAt(i).layout()
             if child is not None:detach(child,widget)
     layout=dialog.layout();box=boxes[-1]
-    for widget in [*buttons,box]:
+    for widget in [*buttons,box, *([export_group] if export_group is not None else [])]:
         parent=widget.parentWidget()
         if parent is not None and parent.layout() is not None:detach(parent.layout(),widget)
     content=QWidget();row=QHBoxLayout(content);row.setContentsMargins(0,0,0,0);row.setSpacing(8)
@@ -221,6 +224,12 @@ def align_order_footer(dialog):
         if button not in export:row.addWidget(button)
     row.addStretch();row.addWidget(box)
     for button in export:row.addWidget(button)
+    if export_group is not None:
+        row.addWidget(export_group)
+        height = max(42, dialog.export_current_btn.fontMetrics().height() + 20)
+        export_group.setFixedHeight(height)
+        for button in export_group.findChildren(QPushButton):
+            button.setFixedHeight(height - 2)
     for button in [*buttons,*box.buttons()]:button.setFixedHeight(max(42,button.fontMetrics().height()+20))
     scroll=QScrollArea();scroll.setObjectName("OrderActionFooter");scroll.setWidgetResizable(True);scroll.setFrameShape(QFrame.NoFrame);scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff);scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
     scroll.setWidget(content);scroll.setFixedHeight(max(b.height() for b in [*buttons,*box.buttons()])+18);layout.addWidget(scroll)

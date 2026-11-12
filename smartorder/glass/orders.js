@@ -135,6 +135,7 @@
     $("account").title = state.role + "\nВыбрать цех";
     $("account").disabled = !state.workshopEnabled;
     $("notifications").hidden = !state.showNotifications;
+    $("help").hidden = !state.showHelp;
     $("notification-count").textContent = state.notifications || "";
     $("zoom").value = state.zoom; lastZoom = state.zoom;
     updateZoom(state.zoom);
@@ -164,7 +165,8 @@
       $(name).disabled = !action.enabled;
     }
     $("order-actions").style.setProperty("grid-template-columns", "");
-    const visibleActions = Object.values(state.actions).filter(a => a.visible).length;
+    $("export-group").hidden = !state.actions.export.visible && !state.actions.print.visible;
+    const visibleActions = Object.entries(state.actions).filter(([name, action]) => name !== "print" && action.visible).length;
     if (window.innerWidth > 1000) $("order-actions").style.gridTemplateColumns = "repeat(" + Math.max(1, visibleActions) + ", minmax(0, 1fr))";
     renderRows(state.rows);
     $("empty-orders").hidden=state.rows.length>0||!state.allowed||state.busy;

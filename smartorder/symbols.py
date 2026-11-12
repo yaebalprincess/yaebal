@@ -45,6 +45,11 @@ def symbol_icon(name, theme="light"):
         painter.drawEllipse(QRectF(8,2,8,8))
         path.moveTo(4,22); path.lineTo(4,19); path.cubicTo(4,10,20,10,20,19)
         path.lineTo(20,22); painter.drawPath(path)
+    elif name == "book":
+        path.moveTo(12,5); path.cubicTo(9,2,5,2,2,4); path.lineTo(2,20)
+        path.cubicTo(5,18,9,18,12,21); path.cubicTo(15,18,19,18,22,20)
+        path.lineTo(22,4); path.cubicTo(19,2,15,2,12,5); path.lineTo(12,21)
+        painter.drawPath(path)
     elif name == "restore":
         path.moveTo(4,9); path.cubicTo(9,-1,23,6,20,16)
         path.cubicTo(18,24,6,24,4,17); path.moveTo(3,3);path.lineTo(3,10);path.lineTo(10,10)

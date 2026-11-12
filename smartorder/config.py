@@ -10,7 +10,7 @@ from copy import deepcopy
 from datetime import datetime
 
 APP_NAME = "SmartOrder"
-APP_VERSION = "1.0.9"
+APP_VERSION = "1.0.10"
 _ACTIVE_WORKSHOP = "packaging"
 WORKSHOP_DB_FILES = {
     "packaging":"work_orders_ypak.db", "smoking":"work_orders_koptil.db",
@@ -158,6 +158,7 @@ class UiSettings:
     language: str = "ru"
     order_columns: list = field(default_factory=list)
     sync_personalization: bool = False
+    editor_column_weights: list = field(default_factory=list)
 
 
 LANGUAGE_CODES=("ru","en","es","kk","fr","de","ja","tt")
@@ -168,7 +169,8 @@ def settings_to_data(settings):
     return {"theme":settings.theme,"zoom":settings.zoom,"appearance":normalize_appearance(settings.appearance),
             "remember_personalization":settings.remember_personalization,"auto_theme":settings.auto_theme,
             "about_theme":settings.about_theme,"language":settings.language,"order_columns":normalize_order_columns(settings.order_columns),
-            "sync_personalization":settings.sync_personalization}
+            "sync_personalization":settings.sync_personalization,
+            "editor_column_weights":normalize_editor_columns(settings.editor_column_weights)}
 
 
 def settings_from_data(data):
@@ -178,7 +180,20 @@ def settings_from_data(data):
         appearance=normalize_appearance(data.get("appearance")),remember_personalization=bool(data.get("remember_personalization",True)),
         auto_theme=bool(data.get("auto_theme",False)),about_theme=1 if data.get("about_theme")==1 else 2,
         language=data.get("language") if data.get("language") in LANGUAGE_CODES else "ru",
-        order_columns=normalize_order_columns(data.get("order_columns")),sync_personalization=bool(data.get("sync_personalization",False)))
+        order_columns=normalize_order_columns(data.get("order_columns")),sync_personalization=bool(data.get("sync_personalization",False)),
+        editor_column_weights=normalize_editor_columns(data.get("editor_column_weights")))
+
+
+def normalize_editor_columns(value):
+    import math
+    if not isinstance(value, list) or len(value) != 8:
+        return []
+    if any(type(item) not in (int, float) or not math.isfinite(item) or item <= 0 for item in value):
+        return []
+    total = sum(value)
+    if not math.isfinite(total):
+        return []
+    return [item / total for item in value]
 
 
 def normalize_order_columns(value):

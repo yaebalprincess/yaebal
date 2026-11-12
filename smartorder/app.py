@@ -36,7 +36,7 @@ def _prepare_windows_qt_dlls() -> None:
 _QT_DLL_DIR_HANDLE = None
 _prepare_windows_qt_dlls()
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import QApplication, QMessageBox, QSplashScreen
 from PyQt5.QtGui import QIcon, QColor, QFont, QPainter, QPen, QPixmap
 
@@ -310,6 +310,8 @@ def main(boot_started: float | None = None) -> int:
         except Exception:
             pass
     mark("main-window-shown")
+    from .context_help import offer_training
+    QTimer.singleShot(650, lambda: offer_training(window))
 
     # Retention maintenance is deliberately outside the startup critical path.
     # It runs in a daemon thread after the UI is already usable, and the DB

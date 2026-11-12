@@ -14,6 +14,7 @@ from PyQt5 import sip
 from PyQt5.QtCore import QEvent, QObject, QPointF, QRectF, Qt, QTimer
 from PyQt5.QtGui import (QColor, QLinearGradient, QPainter, QPainterPath,
                          QPen, QPixmap, QRadialGradient)
+from PyQt5.QtPrintSupport import QPrintDialog, QPageSetupDialog
 from PyQt5.QtWidgets import (QAbstractButton, QAbstractItemView, QApplication,
     QCalendarWidget, QComboBox, QDialog, QFileDialog, QFrame, QGroupBox, QLabel, QLineEdit, QMainWindow,
     QMenu, QPushButton, QScrollArea, QTabBar, QTextBrowser, QToolButton, QWidget)
@@ -23,6 +24,8 @@ from .liquid_style import colors
 from .appearance import appearance_of, wallpaper_path, legacy_surface
 from .live_glass import (LiveGlassBackdrop, attach_overlay, prepare_overlay,
                          update_overlay_geometry)
+
+NATIVE_DIALOGS = (QFileDialog, QPrintDialog, QPageSetupDialog)
 
 
 def theme_of(widget):
@@ -242,6 +245,10 @@ class LiquidController(QObject):
         root._liquid_backdrop.update()
 
     def style_widget(self, widget, theme):
+        if sip.isdeleted(widget):
+            return
+        if isinstance(widget.window(), NATIVE_DIALOGS):
+            return
         if getattr(widget, "_liquid_applied_theme", None) == theme: return
         if isinstance(widget, (GlassBackdrop, LiveGlassBackdrop, ControlLight, PageTransition)) or legacy_surface(widget):
             return
@@ -310,6 +317,8 @@ class LiquidController(QObject):
     def apply(self, root, theme=None):
         if self._styling or sip.isdeleted(root) or legacy_surface(root):
             return
+        if isinstance(root.window(), NATIVE_DIALOGS):
+            return
         self._styling = True
         try:
             theme = theme or theme_of(root)
@@ -336,7 +345,7 @@ class LiquidController(QObject):
     def is_overlay(widget):
         # Qt creates private combo popup windows during polish. Converting those
         # hidden native containers to glass surfaces can expose empty windows.
-        return not isinstance(widget, QFileDialog) and not widget.property("plainSurface") and (isinstance(widget, (QDialog, QMenu)) or bool(widget.property("liquidPopup"))
+        return not isinstance(widget, NATIVE_DIALOGS) and not widget.property("plainSurface") and (isinstance(widget, (QDialog, QMenu)) or bool(widget.property("liquidPopup"))
                 or widget.objectName() in {"NotificationPopup", "RC5InfoPopup"})
 
     def eventFilter(self, widget, event):
@@ -344,7 +353,7 @@ class LiquidController(QObject):
             return False
         kind = event.type()
         window = widget.window()
-        if isinstance(window, QFileDialog) or widget.property("plainSurface") or window.property("plainSurface"):
+        if isinstance(window, NATIVE_DIALOGS) or widget.property("plainSurface") or window.property("plainSurface"):
             return False
         overlay = self.is_overlay(widget)
         if kind == QEvent.Polish and overlay:

@@ -49,14 +49,18 @@ def test_master_scopes_and_analytics_denied(system,role,expected):
     with pytest.raises(DatabaseError):build_report(manager,user,date(2026,10,1),date(2026,10,7))
 
 
-def test_accounting_roles_same_permissions_and_all_shops(system):
+def test_accounting_roles_all_shops_and_economist_read_only(system):
     manager,admin=system
-    assert DEFAULT_ROLE_PERMISSIONS["Экономист"]==DEFAULT_ROLE_PERMISSIONS["Бухгалтер"]
     for role in ("Бухгалтер","Экономист"):
         manager.auth.add_user(admin,role,"password123",role)
         u=manager.auth.authenticate(role,"password123")
         assert set(allowed_workshops(u))==set(WORKSHOPS)
         with pytest.raises(DatabaseError):manager.database("smoking",u).add_employee(u,"Запрещено")
+    assert Permission.ORDERS_EXPORT in DEFAULT_ROLE_PERMISSIONS["Бухгалтер"]
+    assert Permission.CATALOG_CREATE in DEFAULT_ROLE_PERMISSIONS["Бухгалтер"]
+    assert Permission.ORDERS_EXPORT not in DEFAULT_ROLE_PERMISSIONS["Экономист"]
+    assert Permission.CATALOG_CREATE not in DEFAULT_ROLE_PERMISSIONS["Экономист"]
+    assert Permission.NOTIFICATIONS_VIEW in DEFAULT_ROLE_PERMISSIONS["Экономист"]
 
 
 def test_workshop_independent_catalog_people_orders_and_auth(system):

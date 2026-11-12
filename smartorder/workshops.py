@@ -210,6 +210,14 @@ class WorkshopDatabase:
     def __getattr__(self, name):
         target = self.manager.auth if name in _AUTH_METHODS else self.backend
         value = getattr(target, name)
+        if name == "reference_audit":
+            def audit(kind):
+                code = Permission.CATALOG_VIEW if kind == "work_type" else Permission.EMPLOYEES_VIEW
+                self.manager.require(self.user, code)
+                if self.workshop not in allowed_workshops(self.user):
+                    raise DatabaseError("Нет доступа к цеху")
+                return value(kind)
+            return audit
         if name not in _MUTATIONS and name not in _READS:
             return value
         def guarded(*args, **kwargs):

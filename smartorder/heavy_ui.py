@@ -6350,14 +6350,28 @@ class RC20WorkOrderDialog(RC18WorkOrderDialog):
         self.export_current_btn = QPushButton("Выгрузить в Excel", self)
         self.export_current_btn.setVisible(self.user.can(Permission.ORDERS_EXPORT))
         self.export_current_btn.clicked.connect(self._export_current_order)
-        self.layout().addWidget(self.export_current_btn, 0, Qt.AlignRight)
+        from .export_actions import ExportActions
+        self.export_actions = ExportActions(self.export_current_btn, self._print_current_order, self)
+        self.export_actions.setVisible(self.user.can(Permission.ORDERS_EXPORT))
+        self.layout().addWidget(self.export_actions, 0, Qt.AlignRight)
         self.table.setColumnHidden(8, True)
         self.table.horizontalHeaderItem(10).setText("Оплата")
+        self.table.horizontalHeaderItem(1).setText("Часы")
+        self.table.horizontalHeaderItem(1).setToolTip("Часы работы")
         if hasattr(self, "order_number_label"):
             theme, _ = _theme_of(self.parent())
             self.order_number_label.setStyleSheet("background:transparent;border:none;padding:0;color:" + ("#FFFFFF" if theme == "dark" else "#202020") + ";font-weight:900;")
         from .interaction_ui import align_order_footer
         align_order_footer(self)
+        from .order_table_layout import EditorColumnLayout
+        self.editor_columns = EditorColumnLayout(self)
+        self.table.cellDoubleClicked.connect(self._work_double_clicked)
+
+    def _work_double_clicked(self, row, column):
+        if self.view_only or column != 2 or self._is_total(row) or self.separate_worker_check.isChecked():
+            return
+        self.table.setCurrentCell(row, column)
+        self._add_works()
 
     def _export_current_order(self):
         if not self.user.can(Permission.ORDERS_EXPORT):return
@@ -6366,15 +6380,30 @@ class RC20WorkOrderDialog(RC18WorkOrderDialog):
         if not path:return
         if not path.lower().endswith('.xlsx'):path += '.xlsx'
         try:
-            if self.view_only and self.order is not None:
-                order = self.order
-            else:
-                data = self.get_data()
-                order = {"info":{**(self.order['info'] if self.order else {}),**{k:v for k,v in data.items() if k != 'lines'},
-                    "version":version,"master":self.master.currentText(),"department":self.department.currentText()},"lines":data['lines']}
-            result = export_order_xlsx(path, order)
+            result = export_order_xlsx(path, self.current_order_snapshot())
             info(self, "Excel", f"Сохранено:\n{result}")
         except Exception as exc:error(self, "Excel", exc)
+
+    def current_order_snapshot(self):
+        if self.view_only and self.order is not None:
+            return self.order
+        data = self.get_data()
+        return {"info": {**(self.order["info"] if self.order else {}),
+                         **{key: value for key, value in data.items() if key != "lines"},
+                         "version": self.order["info"]["version"] if self.order else "Новый",
+                         "master": self.master.currentText(), "department": self.department.currentText()},
+                "lines": data["lines"]}
+
+    def _print_current_order(self):
+        if not self.user.can(Permission.ORDERS_EXPORT):
+            return
+        from .order_printing import request_print
+        try:
+            if hasattr(self.db, "manager"):
+                self.db.manager.require(self.db.user, Permission.ORDERS_EXPORT)
+            request_print(self.current_order_snapshot(), self)
+        except Exception as exc:
+            error(self, "Печать", exc)
 
     def _write_calculated(self, row, line):
         was_blocked = self.table.signalsBlocked()
