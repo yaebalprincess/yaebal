@@ -1,3 +1,15 @@
+# Smart Order · Liquid Glass v11
+
+- [Скачать SmartOrder v11 — ZIP исходников](https://github.com/yaebalprincess/yaebal/archive/refs/heads/smartorder-liquid-glass-v11.zip)
+- [Запуск, сборка и изменения v11](https://github.com/yaebalprincess/yaebal/tree/smartorder-liquid-glass-v11)
+- [Проверки и снимки экранов](https://github.com/yaebalprincess/yaebal/blob/smartorder-liquid-glass-v11/LIQUID_GLASS_V11_QA.md)
+
+Книга открывает «Обучение: как работать с нарядами?» с кнопкой «Начать!». Нумерованные подсказки с рябью ведут мастера через реальные нажатия и ввод данных до истории и разрешённых функций администрирования. Справка непрозрачная, значки векторные, календарь редактора общий с главным меню. Выгрузка и печать остаются в главном списке. Меню цехов открывается внутри окна; добавлена защита первого кадра и доступности заголовка при перетаскивании.
+
+Основной прогон: 124 проверки прошли. В ZIP исходники и скрипты сборки, готового Windows EXE нет. Нативные Windows Snap и перетаскивание к панели задач в среде Linux не запускались.
+
+---
+
 # Smart Order · Liquid Glass v10
 
 - [Скачать SmartOrder v10 — ZIP исходников](https://github.com/yaebalprincess/yaebal/archive/refs/heads/smartorder-liquid-glass-v10.zip)
