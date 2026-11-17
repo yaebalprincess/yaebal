@@ -271,6 +271,8 @@ def main(boot_started: float | None = None) -> int:
         if login.exec_() != login.Accepted or login.user is None:
             return 0
         session_user = login.user
+        login.password_edit.clear()
+        login.deleteLater()
         mark("login-accepted")
     else:
         session_user = SessionUser(
@@ -281,36 +283,15 @@ def main(boot_started: float | None = None) -> int:
         )
         mark("login-bypassed")
 
-    from .workshops import allowed_workshops
-    from .config import local_state_dir
-    from .workspace_ui import WorkshopLoadingDialog
-    from .i18n import set_language
-    allowed=allowed_workshops(session_user)
-    try:workshop=(local_state_dir()/f"workshop_{session_user.id}.txt").read_text().strip()
-    except OSError:workshop=allowed[0]
-    if workshop not in allowed:workshop=allowed[0]
-    set_language(SettingsStore(session_user.id,session_user.username).load().language)
+    from .account_switch import AccountController, open_workspace
+    manager=startup_box["manager"]
     splash.hide()
-    workshop_loading=WorkshopLoadingDialog(workshop)
-    workshop_loading.show();app.processEvents()
-    window = MainWindow(startup_box["manager"].database(workshop,session_user), session_user, manager=startup_box["manager"])
-    app._smartorder_main_window = window
+    window=open_workspace(app,manager,session_user)
+    app._account_controller=AccountController(app,manager,window)
     mark("main-window-constructed")
-    window.showMaximized()
-    workshop_loading.raise_()
-    app._order_request_server.deliver()
-    app.processEvents()
-    try:
-        splash.finish(window)
-    except Exception:
-        try:
-            splash.hide()
-        except Exception:
-            pass
+    try:splash.finish(window)
+    except Exception:splash.hide()
     mark("main-window-shown")
-    from .context_help import offer_training
-    from .workspace_ui import reveal_after_first_frame
-    reveal_after_first_frame(window, workshop_loading, lambda: offer_training(window))
 
     # Retention maintenance is deliberately outside the startup critical path.
     # It runs in a daemon thread after the UI is already usable, and the DB
@@ -320,8 +301,8 @@ def main(boot_started: float | None = None) -> int:
         while True:
             try:
                 # Each workspace retains its own production history independently.
-                with window.workshop_manager._lock:
-                    databases = list(window.workshop_manager._databases.values())
+                with manager._lock:
+                    databases = list(manager._databases.values())
                 stats = {}
                 for production_db in databases:
                     stats = production_db.run_retention_maintenance()

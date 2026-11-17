@@ -6,15 +6,15 @@ from decimal import Decimal
 from pathlib import Path
 
 from PyQt5 import sip
-from PyQt5.QtCore import QEvent, QObject, QPoint, QRect, QRectF, Qt, QTimer, QVariantAnimation
-from PyQt5.QtGui import QColor, QPainter, QPainterPath, QPen, QRegion
-from PyQt5.QtWidgets import (QApplication, QDialog, QDialogButtonBox, QFrame, QHBoxLayout,
+from PyQt5.QtCore import QEvent, QObject, QPoint, QRect, Qt, QTimer
+from PyQt5.QtWidgets import (QApplication, QDialog, QDialogButtonBox, QFrame,
                             QLabel, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget)
 
 from .domain import OrderLine, dec
-from .help_surface import opaque_help, center_dialog
+from .help_surface import center_dialog
 from .i18n import REVERSE
 from .security import ALL_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, Permission, SessionUser
+from .training_overlay import CoachOverlay, TutorialDialog
 
 
 def capabilities(user):
@@ -30,7 +30,7 @@ def lesson_keys(user):
         allowed.difference_update({Permission.ORDERS_CREATE,Permission.ORDERS_EDIT,Permission.ORDERS_HISTORY})
     if Permission.ORDERS_CREATE in allowed:
         keys += ["create","date","shift","master","department","employees","works","hours","boxes","weight","save"]
-    if Permission.ORDERS_EDIT in allowed:keys += ["edit_hours","edit_save"]
+    if Permission.ORDERS_EDIT in allowed:keys += ["edit","edit_any","edit_save"]
     if Permission.ORDERS_HISTORY in allowed:keys.append("history")
     if Permission.ADMIN_VIEW in allowed:
         keys.append("administration")
@@ -48,11 +48,12 @@ LESSONS={
  "department":("Выберите подразделение","Выберите учебное подразделение, к которому относится наряд."),
  "employees":("Добавьте работника","Нажмите «Добавить работников». В открывшемся списке отметьте учебного работника и подтвердите выбор."),
  "works":("Добавьте работу","Нажмите «Добавить работы», отметьте учебную работу и подтвердите выбор."),
- "hours":("Введите часы","Нажмите подсвеченную ячейку, введите часы работы, например 8, и завершите ввод клавишей Enter."),
- "boxes":("Укажите количество коробок","Введите количество коробок, например 12. После ввода нажмите Enter."),
- "weight":("Укажите вес коробки","Введите вес одной коробки, например 3 кг. Итоговый вес и оплата рассчитываются автоматически."),
+ "hours":("Введите часы","Нажмите подсвеченную ячейку и введите часы работы, например 8. Затем нажмите «ОК» в этой подсказке."),
+ "boxes":("Укажите количество коробок","Введите количество коробок, например 12. Затем нажмите «ОК» в этой подсказке."),
+ "weight":("Укажите вес коробки","Введите вес одной коробки, например 3 кг, и нажмите «ОК». Итоговый вес и оплата рассчитываются автоматически."),
  "save":("Сохраните учебный наряд","Нажмите «Сохранить». Так завершается создание наряда. Этот пример останется только в обучении."),
- "edit_hours":("Попробуйте редактирование","Сохранённый учебный наряд открыт для исправления. Справа в шапке мигает отметка режима. Измените часы в выделенной ячейке."),
+ "edit":("Попробуйте редактирование","Здесь показан только ваш учебный наряд. Он уже выбран в списке. Нажмите подсвеченную кнопку «Редактировать». Рабочие наряды вернутся после обучения."),
+ "edit_any":("Измените любые данные","Исправьте часы, количество коробок, вес, дату или комментарий учебного наряда. Справа в шапке мигает отметка режима редактирования. После изменения нажмите «ОК» в этой подсказке."),
  "edit_save":("Сохраните исправление","Нажмите «Сохранить»: появится новая версия, а первоначальные значения останутся в истории."),
  "history":("Посмотрите историю","Здесь отображаются авторы и время изменений. Нажмите на подсвеченный виджет — откроем подробную историю вашего учебного наряда."),
  "administration":("Откройте администрирование","Нажмите вкладку «Администрирование». Покажем только те функции, которые доступны мастеру с вашими правами."),
@@ -63,91 +64,14 @@ LESSONS={
 }
 
 
-class CoachOverlay(QFrame):
-    def __init__(self, tour, host, title, text, number, total, informational=False):
-        super().__init__(host)
-        self.tour,self.host,self.target=tour,host,QRect()
-        self.number=number;self.phase=0.0
-        self.extra_holes=[]
-        self.setProperty("plainSurface",True)
-        self.setObjectName("ClickTrainingOverlay")
-        self.setAttribute(Qt.WA_TranslucentBackground,True)
-        self.setAttribute(Qt.WA_NoSystemBackground,True)
-        self.setAutoFillBackground(False)
-        self.setStyleSheet("QFrame#ClickTrainingOverlay{background:transparent;border:0;}")
-        self.setGeometry(host.rect())
-        self.card=QFrame(self);self.card.setObjectName("TrainingCard")
-        opaque_help(self.card,tour.owner.ui_settings.theme)
-        layout=QVBoxLayout(self.card);layout.setContentsMargins(18,15,18,15);layout.setSpacing(10)
-        tag=QLabel(f"ШАГ {number} ИЗ {total} · ОБУЧЕНИЕ МАСТЕРА",self.card);tag.setObjectName("TrainingKicker");layout.addWidget(tag)
-        heading=QLabel(title,self.card);heading.setObjectName("TrainingTitle");heading.setWordWrap(True);layout.addWidget(heading)
-        body=QLabel(text,self.card);body.setWordWrap(True);layout.addWidget(body)
-        row=QHBoxLayout();stop=QPushButton("Завершить обучение",self.card);stop.clicked.connect(tour.finish);row.addWidget(stop);row.addStretch()
-        if informational:
-            next_button=QPushButton("Далее",self.card);next_button.setObjectName("PrimaryButton");next_button.clicked.connect(tour.next);row.addWidget(next_button)
-        layout.addLayout(row)
-        self.card.setFixedWidth(min(400,max(280,host.width()-32)))
-        self.card.adjustSize()
-        self.card.hide()
-        host.installEventFilter(self)
-        self.animation=QVariantAnimation(self);self.animation.setDuration(1400);self.animation.setStartValue(0.0);self.animation.setEndValue(1.0);self.animation.setLoopCount(-1)
-        self.animation.valueChanged.connect(self._pulse)
-        self.show();self.raise_();self.animation.start()
-
-    def _pulse(self,value):self.phase=float(value);self.update()
-
-    def highlight(self, rect):
-        self.target=rect.intersected(self.rect())
-        vertical_space=max(self.target.top()-24,self.height()-self.target.bottom()-24)
-        if vertical_space<self.card.height():
-            space=max(self.target.left()-24,self.width()-self.target.right()-24)
-            self.card.setFixedWidth(min(400,max(260,space)))
-            self.card.adjustSize()
-        width,height=self.card.width(),self.card.height()
-        candidates=[QPoint(self.target.left(),self.target.bottom()+18),QPoint(self.target.right()+18,self.target.top()),
-                    QPoint(self.target.left(),self.target.top()-height-18),QPoint(self.target.left()-width-18,self.target.top())]
-        def fit(point):return QPoint(max(12,min(point.x(),self.width()-width-12)),max(12,min(point.y(),self.height()-height-12)))
-        best=min((fit(point) for point in candidates),key=lambda point: self.target.intersected(QRect(point,self.card.size())).width()*self.target.intersected(QRect(point,self.card.size())).height())
-        self.card.move(best)
-        self.card.show()
-        mask=QRegion(self.rect()).subtracted(QRegion(self.target.adjusted(1,1,-1,-1)))
-        for hole in self.extra_holes:mask=mask.subtracted(QRegion(hole))
-        self.setMask(mask.united(QRegion(self.card.geometry())))
-        self.update()
-
-    def eventFilter(self,watched,event):
-        if event.type()==QEvent.Resize:
-            self.setGeometry(self.host.rect());self.tour.position_target()
-        return False
-
-    def hideEvent(self,event):
-        self.animation.stop();super().hideEvent(event)
-
-    def paintEvent(self,event):
-        painter=QPainter(self);painter.setRenderHint(QPainter.Antialiasing)
-        shade=QPainterPath();shade.setFillRule(Qt.OddEvenFill);shade.addRect(QRectF(self.rect()))
-        if not self.target.isEmpty():shade.addRoundedRect(QRectF(self.target.adjusted(-3,-3,3,3)),10,10)
-        painter.fillPath(shade,QColor(6,20,37,130))
-        if self.target.isEmpty():return
-        painter.setPen(QPen(QColor("#62bcff"),2));painter.drawRoundedRect(QRectF(self.target.adjusted(-4,-4,4,4)),10,10)
-        center=QPoint(max(24,min(self.target.left()+10,self.width()-25)),max(26,self.target.top()-13))
-        painter.setBrush(Qt.NoBrush)
-        for offset in (0.0,.5):
-            phase=(self.phase+offset)%1
-            painter.setPen(QPen(QColor(74,177,255,int(150*(1-phase))),2))
-            radius=17+phase*18;painter.drawEllipse(QRectF(center.x()-radius,center.y()-radius,2*radius,2*radius))
-        painter.setPen(QPen(QColor("#b5e3ff"),1.5));painter.setBrush(QColor("#087bfa"));painter.drawEllipse(center,16,16)
-        font=painter.font();font.setPixelSize(15);font.setBold(True);painter.setFont(font);painter.setPen(Qt.white)
-        painter.drawText(QRect(center.x()-16,center.y()-16,32,32),Qt.AlignCenter,str(self.number))
-
-
 class GuidedTour(QObject):
     def __init__(self,owner):
         super().__init__(owner)
         self.owner=owner;self.keys=lesson_keys(owner.user);self.index=-1;self.running=True
         self.original_tab=owner.tabs.currentIndex();self.editor=None;self.picker=None;self.coach=None
         self.target=QRect();self.host=owner;self.temp=None;self.demo_order=None;self.editing=False
-        self._eat_release=False;self._pending=False;self._changing=False
+        self._eat_release=False;self._pending=False;self._changing=False;self._confirming=False
+        self.layers={};self._edit_baseline=None;self.practice_history=[]
         QApplication.instance().installEventFilter(self)
 
     @property
@@ -171,7 +95,29 @@ class GuidedTour(QObject):
 
     def clear_coach(self):
         if self.coach is not None:
-            self.coach.hide();self.coach.deleteLater();self.coach=None
+            self.coach.passive();self.coach=None
+
+    def new_coach(self, host, title, text, informational=False, confirm=False):
+        old=self.layers.pop(host,None)
+        if old is not None and not sip.isdeleted(old):old.hide();old.deleteLater()
+        self.coach=CoachOverlay(self,host,title,text,self.index+1,len(self.keys),informational,confirm)
+        self.layers[host]=self.coach
+
+    def main_state(self, state):
+        """The practice list is presentation-only; production models stay intact."""
+        state.update(rows=[],selected=None,history=[],draftView=False,
+                     emptyMessage="Учебная среда: создайте первый наряд.",busy=False,topRestricted=False)
+        for name,action in state["actions"].items():
+            action["enabled"] = name=="create" and self.key=="create" or name=="edit" and self.key=="edit"
+        if self.demo_order is not None:
+            info=self.demo_order["info"]
+            state["rows"]=[{"key":"practice", "draft":False, "cells":[str(info.get("version","1")),
+                info["order_date"].replace("-","."),info["shift_type"],info.get("master", "Учебный мастер"),
+                info.get("department", "Учебное подразделение"),info.get("registration_date", "")]}]
+            state["selected"]="practice"
+            for index,record in enumerate(self.practice_history):
+                state["history"].append(("Создал" if index==0 else "Редактировал")+": "+str(record["edited_by"])+" · "+str(record["edit_date"] or record["registration_date"]))
+        return state
 
     def _ensure_data(self,seed=False):
         if self.temp is None:
@@ -187,6 +133,7 @@ class GuidedTour(QObject):
             line=OrderLine(self.worker,"Иванов Иван · учебный работник",self.work,"Упаковка готовой продукции · учебная работа","0000001",Decimal(2),Decimal(8),Decimal(12),Decimal(3))
             identity=self.db.save_order(self.actor,date.today().strftime("%d-%m-%Y"),"Дневная",self.master,self.department,[line])
             self.demo_order=self.db.get_order(identity)
+            self.practice_history=list(reversed(self.db.order_history(identity)))
 
     def make_editor(self,editing):
         if self.editor is not None and self.editing==editing:return self.editor
@@ -198,16 +145,27 @@ class GuidedTour(QObject):
         class PracticeEditor(HeavyWorkOrderDialog):
             def _save_draft(self):pass
             def _accept(self):tour.save(self)
+            def reject(self):
+                if tour.running and not tour._changing:tour.request_finish()
+                else:QDialog.reject(self)
+            def closeEvent(self,event):
+                if tour.running and not tour._changing:event.ignore();tour.request_finish()
+                else:QDialog.closeEvent(self,event)
         dialog=PracticeEditor(self.db,self.owner.user,self.demo_order if editing else None,parent=self.owner)
         dialog.setWindowTitle("Учебный пример · "+("Редактирование наряда" if editing else "Создание наряда"))
         dialog.setWindowModality(Qt.WindowModal)
         if not editing:
             for combo in (dialog.shift,dialog.master,dialog.department):combo.setCurrentIndex(-1)
         self.editor=dialog;self.editing=editing
+        self._edit_baseline=dialog.get_data() if editing else None
         dialog.order_date._popup.dateSelected.connect(lambda value:self.field_done("date"))
         for name in ("shift","master","department"):
             getattr(dialog,name).currentIndexChanged.connect(lambda index,key=name:self.field_done(key) if index>=0 else None)
         dialog.table.itemChanged.connect(self.manual_changed)
+        for field in (dialog.order_date,):field.dateChanged.connect(self.changed_any)
+        for combo in (dialog.shift,dialog.master,dialog.department):combo.currentIndexChanged.connect(self.changed_any)
+        dialog.comment.textChanged.connect(self.changed_any)
+        dialog.separate_worker_check.toggled.connect(self.changed_any)
         dialog.finished.connect(lambda result:self.editor_finished(dialog,result))
         self._changing=False;dialog.show()
         return dialog
@@ -216,12 +174,41 @@ class GuidedTour(QObject):
         if self.running and self.key==key:self.queue_next()
 
     def manual_changed(self,item):
-        wanted={"hours":1,"boxes":5,"weight":6,"edit_hours":1}.get(self.key)
+        if self.key=="edit_any":self.changed_any();return
+        wanted={"hours":1,"boxes":5,"weight":6}.get(self.key)
         if wanted is None or item.column()!=wanted:return
         value=dec(item.text())
         if value is None or not value.is_finite() or value<=0 or wanted==1 and value>24:return
-        if self.key=="edit_hours" and self.demo_order and value==self.demo_order["lines"][0].hours:return
-        self.queue_next()
+        self.update_confirm()
+
+    def changed_any(self,*_):
+        if self.running and self.key=="edit_any" and not self._changing:self.update_confirm()
+
+    def value_ready(self):
+        if self.editor is None:return False
+        if self.key=="edit_any":return self.editor.get_data()!=self._edit_baseline
+        column={"hours":1,"boxes":5,"weight":6}.get(self.key)
+        if column is None:return False
+        item=self.editor.table.item(self.work_row(),column)
+        value=dec(item.text()) if item is not None else None
+        return value is not None and value.is_finite() and value>0 and (column!=1 or value<=24)
+
+    def update_confirm(self):
+        if self.coach is not None and self.coach.card.confirm is not None:
+            # Keep OK clickable while an editor holds uncommitted text; the
+            # focus transfer commits the cell before confirm_value validates it.
+            self.coach.card.confirm.setEnabled(True)
+
+    def confirm_value(self):
+        if not self.running:return
+        if self.coach is not None:self.coach.card.setFocus(Qt.OtherFocusReason)
+        def committed():
+            if not self.running:return
+            if self.value_ready():self.queue_next()
+            else:
+                self.coach.card.body.setText("Измените данные учебного наряда." if self.key=="edit_any" else "Введите положительное число в подсвеченную ячейку, затем нажмите «ОК».")
+                self.position_target()
+        QTimer.singleShot(0,committed)
 
     def save(self,dialog):
         if not self.running or self.key not in ("save","edit_save"):return
@@ -230,6 +217,7 @@ class GuidedTour(QObject):
         data=dialog.get_data()
         identity=self.db.save_order(self.owner.user,**data,parent_id=dialog.order_id if self.editing else None)
         self.demo_order=self.db.get_order(identity)
+        self.practice_history=list(reversed(self.db.order_history(identity)))
         dialog._course_saved=True
         QDialog.accept(dialog)
 
@@ -243,8 +231,9 @@ class GuidedTour(QObject):
         self.clear_coach()
         self.target=QRect()
         key=self.key
+        if key in {"edit","history"}:self._ensure_data(seed=True)
         if key not in lesson_keys(self.owner.user) or not getattr(self.owner,"_account_active",True):self.finish();return
-        editor_keys={"date","shift","master","department","employees","works","hours","boxes","weight","save","edit_hours","edit_save"}
+        editor_keys={"date","shift","master","department","employees","works","hours","boxes","weight","save","edit_any","edit_save"}
         if key in editor_keys:
             self.host=self.make_editor(key.startswith("edit_"))
         else:
@@ -254,8 +243,9 @@ class GuidedTour(QObject):
             elif self.owner.tabs.isTabEnabled(0):self.owner.tabs.setCurrentIndex(0)
         title,text=LESSONS[key]
         self.host.raise_();self.host.activateWindow()
-        self.coach=CoachOverlay(self,self.host,title,text,self.index+1,len(self.keys),key.startswith("admin_"))
-        self.position_target()
+        self.new_coach(self.host,title,text,key.startswith("admin_"),key in {"hours","boxes","weight","edit_any"})
+        if hasattr(self.owner,"_publish_glass_state"):self.owner._publish_glass_state(force=True)
+        QTimer.singleShot(0,self.position_target)
 
     def work_row(self):
         for row in range(self.editor.table.rowCount()):
@@ -274,14 +264,19 @@ class GuidedTour(QObject):
                 button=box.button(QDialogButtonBox.Ok)
                 self.coach.extra_holes=[QRect(button.mapTo(host,QPoint()),button.size())]
             return QRect(listing.viewport().mapTo(host,first.topLeft()),first.size())
-        if key in ("hours","boxes","weight","edit_hours"):
-            table=self.editor.table;column={"hours":1,"boxes":5,"weight":6,"edit_hours":1}[key]
+        if key in ("hours","boxes","weight"):
+            table=self.editor.table;column={"hours":1,"boxes":5,"weight":6}[key]
             row=self.work_row();table.setCurrentCell(row,column);table.scrollToItem(table.item(row,column))
             rect=table.visualItemRect(table.item(row,column))
             return QRect(table.viewport().mapTo(host,rect.topLeft()),rect.size())
+        if key=="edit_any":
+            self.coach.extra_holes=[QRect(widget.mapTo(host,QPoint()),widget.size()) for widget in
+                (self.editor.order_date,self.editor.shift,self.editor.master,self.editor.department,self.editor.comment,
+                 self.editor.separate_worker_check,self.editor.add_employee_btn,self.editor.add_work_btn,self.editor.delete_row_btn)]
+            return QRect(self.editor.table.mapTo(host,QPoint()),self.editor.table.size())
         if key=="administration":
             bar=self.owner.tabs.tabBar();rect=bar.tabRect(3);return QRect(bar.mapTo(host,rect.topLeft()),rect.size())
-        names={"create":"create_order_btn","history":"info_panel","employees":"add_employee_btn","works":"add_work_btn",
+        names={"create":"create_order_btn","edit":"edit_order_btn","date":"order_date","history":"info_panel","employees":"add_employee_btn","works":"add_work_btn",
                "save":"button_box","edit_save":"button_box","admin_sync":"admin_sync_btn","admin_audit":"audit_table"}
         widget=getattr(self.editor if host is self.editor else self.owner,names.get(key,key),None)
         if key in ("save","edit_save") and widget is not None:widget=widget.button(QDialogButtonBox.Ok)
@@ -299,8 +294,8 @@ class GuidedTour(QObject):
     def position_target(self):
         if not self.running or self.coach is None:return
         coach=self.coach;key=self.key
-        if self.host is self.owner and key in ("create","history") and getattr(self.owner,"_glass_painted",False):
-            target="create" if key=="create" else "history-panel"
+        if self.host is self.owner and key in ("create","edit","history") and getattr(self.owner,"_glass_painted",False):
+            target={"create":"create","edit":"edit","history":"history-panel"}[key]
             script='(function(){var e=document.getElementById('+json.dumps(target)+');e.scrollIntoView({block:"nearest",inline:"nearest"});var r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height];})()'
             def got(bounds):
                 if not self.running or self.coach is not coach or not bounds:return
@@ -320,7 +315,7 @@ class GuidedTour(QObject):
         self.clear_coach();self.picker=dialog;self.host=dialog
         title="Выберите работника" if self.key=="employees" else "Выберите работу"
         text="Отметьте учебную строку в списке и нажмите ОК. После подтверждения продолжим заполнение наряда."
-        self.coach=CoachOverlay(self,dialog,title,text,self.index+1,len(self.keys))
+        self.new_coach(dialog,title,text)
         dialog.accepted.connect(self.picker_accepted)
         dialog.rejected.connect(self.picker_rejected)
         self.position_target()
@@ -334,7 +329,7 @@ class GuidedTour(QObject):
         self.picker=None;QTimer.singleShot(0,self.present)
 
     def click_target(self):
-        if self.key=="create":self.next()
+        if self.key in ("create","edit"):self.next()
         elif self.key=="history":
             self._ensure_data(seed=True)
             from .order_history import history_html
@@ -346,7 +341,7 @@ class GuidedTour(QObject):
         elif self.key.startswith("admin_"):self.next()
 
     def eventFilter(self,watched,event):
-        if not self.running:return False
+        if not self.running or self._confirming:return False
         kind=event.type()
         if watched is self.owner and kind==QEvent.Close:self.finish();return False
         if kind==QEvent.Show and isinstance(watched,QDialog) and self.editor is not None:
@@ -364,34 +359,48 @@ class GuidedTour(QObject):
         if kind==QEvent.MouseButtonPress and hasattr(event,"globalPos") and event.button()==Qt.LeftButton:
             if self.coach is None or not isinstance(watched,QWidget) or watched.window() is not self.host.window():return False
             if self.coach is not None and QRect(self.coach.card.mapToGlobal(QPoint()),self.coach.card.size()).contains(event.globalPos()):return False
-            if self.key in ("create","history","administration") or self.key.startswith("admin_"):
+            if self.key in ("create","edit","history","administration") or self.key.startswith("admin_"):
                 if self.target.contains(event.globalPos()):
                     self._eat_release=True;QTimer.singleShot(0,self.click_target);return True
         if kind==QEvent.KeyPress and event.key()==Qt.Key_Escape:
             if QApplication.activePopupWidget() is not None:return False
             if self.editor is not None and self.editor.order_date._popup.isVisible():return False
-            self.finish();return True
+            self.request_finish();return True
         if kind==QEvent.KeyPress and isinstance(watched,QWidget) and watched.window() is self.owner:
             on_card=self.coach is not None and (watched is self.coach.card or self.coach.card.isAncestorOf(watched))
             if not on_card and event.key()!=Qt.Key_F1:
-                if event.key() in (Qt.Key_Return,Qt.Key_Enter,Qt.Key_Space) and (self.key in ("create","history","administration") or self.key.startswith("admin_")):
+                if event.key() in (Qt.Key_Return,Qt.Key_Enter,Qt.Key_Space) and (self.key in ("create","edit","history","administration") or self.key.startswith("admin_")):
                     self.click_target()
                 return True
         return False
+
+    def request_finish(self,checked=False):
+        if not self.running or self._confirming:return
+        from .heavy_ui import question
+        self._confirming=True
+        try:answer=question(self.host,"Завершение обучения","Вы точно хотите закончить обучение?")
+        finally:self._confirming=False
+        if answer==QMessageBox.Yes:self.finish()
 
     def finish(self,checked=False,completed=False):
         if not self.running:return
         self.running=False;self.clear_coach()
         QApplication.instance().removeEventFilter(self)
+        for layer in self.layers.values():
+            if not sip.isdeleted(layer):layer.hide();layer.deleteLater()
+        self.layers.clear()
+        if getattr(self.owner,"_glass",None) is not None:
+            self.owner._glass.page().runJavaScript("window.SmartOrderCoach&&window.SmartOrderCoach.hide()")
         if self.picker is not None and not sip.isdeleted(self.picker):self.picker.reject()
         if self.editor is not None and not sip.isdeleted(self.editor):self.editor.reject();self.editor.deleteLater()
         if self.temp is not None:self.temp.cleanup()
         if not sip.isdeleted(self.owner):
             if self.owner.tabs.isTabEnabled(self.original_tab):self.owner.tabs.setCurrentIndex(self.original_tab)
             self.owner._master_tour=None
+            if hasattr(self.owner,"_publish_glass_state"):self.owner._publish_glass_state(force=True)
             if completed:
-                dialog=QDialog(self.owner);opaque_help(dialog,self.owner.ui_settings.theme);dialog.setWindowTitle("Обучение завершено")
+                dialog=TutorialDialog(self.owner);dialog.setWindowTitle("Обучение завершено")
                 layout=QVBoxLayout(dialog);label=QLabel("Готово! Теперь вы знаете, как создать и исправить наряд, посмотреть историю и найти доступные функции администрирования.",dialog);label.setWordWrap(True);layout.addWidget(label)
                 button=QPushButton("Начать работу",dialog);button.setObjectName("PrimaryButton");button.clicked.connect(dialog.accept);layout.addWidget(button)
-                dialog.setFixedWidth(460);dialog.setAttribute(Qt.WA_DeleteOnClose);self.owner._training_complete=dialog;center_dialog(dialog,self.owner);dialog.show()
+                dialog.setFixedWidth(560);dialog.setAttribute(Qt.WA_DeleteOnClose);self.owner._training_complete=dialog;center_dialog(dialog,self.owner);dialog.show()
         self.deleteLater()

@@ -1191,6 +1191,9 @@ def _message(parent, icon, title, text, buttons=QMessageBox.Ok, default=QMessage
         if no is not None: no.setText("Нет")
     except Exception:
         pass
+    box.adjustSize()
+    if isinstance(parent,QWidget):
+        box.move(parent.window().frameGeometry().center()-box.rect().center())
     result = box.exec_()
     return result
 
@@ -6360,10 +6363,13 @@ class RC20WorkOrderDialog(RC18WorkOrderDialog):
         if hasattr(self, "order_number_label"):
             theme, _ = _theme_of(self.parent())
             self.order_number_label.setStyleSheet("background:transparent;border:none;padding:0;color:" + ("#FFFFFF" if theme == "dark" else "#202020") + ";font-weight:900;")
+        self.reset_columns_btn = QPushButton("Столбцы по умолч.", self)
+        self.reset_columns_btn.setToolTip("Восстановить исходную ширину столбцов во всех нарядах")
         from .interaction_ui import align_order_footer
         align_order_footer(self)
         from .order_table_layout import EditorColumnLayout
         self.editor_columns = EditorColumnLayout(self)
+        self.reset_columns_btn.clicked.connect(self.editor_columns.reset)
         self.table.cellDoubleClicked.connect(self._work_double_clicked)
 
     def _work_double_clicked(self, row, column):
@@ -6392,17 +6398,6 @@ class RC20WorkOrderDialog(RC18WorkOrderDialog):
                          "version": self.order["info"]["version"] if self.order else "Новый",
                          "master": self.master.currentText(), "department": self.department.currentText()},
                 "lines": data["lines"]}
-
-    def _print_current_order(self):
-        if not self.user.can(Permission.ORDERS_EXPORT):
-            return
-        from .order_printing import request_print
-        try:
-            if hasattr(self.db, "manager"):
-                self.db.manager.require(self.db.user, Permission.ORDERS_EXPORT)
-            request_print(self.current_order_snapshot(), self)
-        except Exception as exc:
-            error(self, "Печать", exc)
 
     def _write_calculated(self, row, line):
         was_blocked = self.table.signalsBlocked()

@@ -214,12 +214,13 @@ def test_master_follows_clicks_through_order_history_and_admin(system,app,monkey
         pick_one(app,tour,tour.editor.add_employee_btn);drain(app,lambda:tour.key=="works")
         pick_one(app,tour,tour.editor.add_work_btn);drain(app,lambda:tour.key=="hours")
         for key,column,value in (("hours",1,"8"),("boxes",5,"12"),("weight",6,"3")):
-            assert tour.key==key;enter_value(app,tour,column,value);drain(app,lambda:tour.key!=key)
+            assert tour.key==key;enter_value(app,tour,column,value);tour.coach.card.confirm.click();drain(app,lambda:tour.key!=key)
         assert tour.key=="save"
         QTest.mouseClick(tour.editor.button_box.button(QDialogButtonBox.Ok),Qt.LeftButton)
         assert not warnings,warnings
-        drain(app,lambda:tour.key=="edit_hours")
-        enter_value(app,tour,1,"9");drain(app,lambda:tour.key=="edit_save")
+        drain(app,lambda:tour.key=="edit")
+        click_lesson(app,tour);drain(app,lambda:tour.key=="edit_any")
+        enter_value(app,tour,1,"9");tour.coach.card.confirm.click();drain(app,lambda:tour.key=="edit_save")
         QTest.mouseClick(tour.editor.button_box.button(QDialogButtonBox.Ok),Qt.LeftButton)
         assert not warnings,warnings
         drain(app,lambda:tour.key=="history")

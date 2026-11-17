@@ -70,6 +70,11 @@ def draw_symbol(painter, rect, name, theme, mode=QIcon.Normal):
         painter.drawEllipse(QRectF(8,2,8,8))
         path.moveTo(4,22); path.lineTo(4,19); path.cubicTo(4,10,20,10,20,19)
         path.lineTo(20,22); painter.drawPath(path)
+    elif name == "switch_account":
+        path.moveTo(12,3);path.lineTo(5,3);path.quadTo(3,3,3,5);path.lineTo(3,19)
+        path.quadTo(3,21,5,21);path.lineTo(12,21)
+        path.moveTo(10,12);path.lineTo(22,12);path.moveTo(17,7);path.lineTo(22,12);path.lineTo(17,17)
+        painter.drawPath(path)
     elif name == "bell":
         path.moveTo(5,17); path.lineTo(19,17); path.lineTo(17,14); path.lineTo(17,9)
         path.cubicTo(17,2,7,2,7,9); path.lineTo(7,14); path.closeSubpath()

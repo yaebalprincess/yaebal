@@ -41,8 +41,8 @@ def test_all_tabs_share_wallpaper_theme_and_readable_native_controls(glass, app)
     assert "Новости обновлений" in buttons
     from smartorder.glass_about import DownloadGuideButton
     assert window.tabs.currentWidget().findChild(DownloadGuideButton) is not None
-    footer = window.tabs.currentWidget().findChild(QTextBrowser, "AboutFooter")
-    assert footer.document().find("tmbsir").charFormat().fontUnderline()
+    footer = window.tabs.currentWidget().findChild(QLabel, "AboutFooter")
+    assert "text-decoration:underline" in footer.text() and footer.openExternalLinks()
 
 
 def test_real_create_button_saves_validated_order_with_calculations(glass, app, monkeypatch):

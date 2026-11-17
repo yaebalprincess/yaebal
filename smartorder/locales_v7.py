@@ -341,6 +341,12 @@ NEW_DATA='''Учётная запись отключена. Войдите за�
 Все наряды|All work orders|Todas las órdenes|Барлық нарядтар|Tous les ordres de travail|Alle Arbeitsaufträge|すべての作業指示書|Барлык нарядлар
 У вас нет несохранённых черновиков.|You have no unsaved drafts.|No tienes borradores sin guardar.|Сақталмаған нобайларыңыз жоқ.|Vous n’avez aucun brouillon non enregistré.|Sie haben keine ungespeicherten Entwürfe.|未保存の下書きはありません。|Сакланмаган караламаларыгыз юк.'''
 
+NEW_DATA+='''
+Сменить аккаунт|Switch account|Cambiar de cuenta|Аккаунтты ауыстыру|Changer de compte|Konto wechseln|アカウントを切り替える|Аккаунтны алыштыру
+Вы уверены, что хотите выйти из аккаунта?|Are you sure you want to sign out?|¿Seguro que quieres cerrar sesión?|Аккаунттан шығуға сенімдісіз бе?|Voulez-vous vraiment vous déconnecter ?|Möchten Sie sich wirklich abmelden?|アカウントからログアウトしますか？|Аккаунттан чыгарга телисезме?
+Выйти из текущего аккаунта и открыть окно авторизации|Sign out and open the sign-in window|Cerrar sesión y abrir el acceso|Аккаунттан шығып, кіру терезесін ашу|Se déconnecter et ouvrir la connexion|Abmelden und Anmeldung öffnen|ログアウトしてログイン画面を開く|Аккаунттан чыгып, керү тәрәзәсен ачу
+Столбцы по умолч.|Default columns|Columnas predeterminadas|Әдепкі бағандар|Colonnes par défaut|Standardspalten|列を初期設定に戻す|Башлангыч баганалар'''
+
 BASE_NEW={}
 for row in NEW_DATA.splitlines():
     source,en,es,*values=row.split('|')

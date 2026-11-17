@@ -107,7 +107,21 @@ class WorkshopPopup(QFrame):
         self.setFocusPolicy(Qt.StrongFocus)
         QApplication.instance().installEventFilter(self)
         layout=QVBoxLayout(self);layout.setContentsMargins(8,8,8,8);layout.setSpacing(2)
-        header=QLabel(owner.user.username+" · "+" · ".join(tr(role) for role in owner.user.roles));header.setWordWrap(True);layout.addWidget(header)
+        from PyQt5.QtWidgets import QHBoxLayout
+        from PyQt5.QtCore import QSize
+        from .symbols import symbol_icon
+        header_row=QHBoxLayout();header_row.setSpacing(8)
+        header=QLabel(owner.user.username+" · "+" · ".join(tr(role) for role in owner.user.roles));header.setWordWrap(True);header.setMinimumWidth(0);header_row.addWidget(header,1)
+        self.switch_account_button=QToolButton(self)
+        self.switch_account_button.setObjectName("SwitchAccountButton")
+        self.switch_account_button.setText(tr("Сменить аккаунт"))
+        self.switch_account_button.setIcon(symbol_icon("switch_account",owner.ui_settings.theme))
+        self.switch_account_button.setIconSize(QSize(18,18))
+        self.switch_account_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.switch_account_button.setCursor(Qt.PointingHandCursor)
+        self.switch_account_button.setToolTip(tr("Выйти из текущего аккаунта и открыть окно авторизации"))
+        self.switch_account_button.clicked.connect(owner.switch_account)
+        header_row.addWidget(self.switch_account_button);layout.addLayout(header_row)
         from .workshops import WORKSHOPS,allowed_workshops
         from .symbols import WORKSHOP_SYMBOLS,symbol_icon
         for key,title in WORKSHOPS.items():
@@ -115,7 +129,7 @@ class WorkshopPopup(QFrame):
             action.triggered.connect(lambda _,k=key:self.select(k));self._actions.append(action)
             button=QToolButton();button.setDefaultAction(action);button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
             button.setCursor(Qt.PointingHandCursor if action.isEnabled() else Qt.ForbiddenCursor);layout.addWidget(button)
-        self.setFixedWidth(max(290,min(480,owner.titlebar.badge.width())));apply_language(self)
+        self.setFixedWidth(max(360,min(480,owner.titlebar.badge.width())));apply_language(self)
     def actions(self):return self._actions
     def select(self,key):self.close();self.owner._switch_to_workshop(key)
     def popup(self,point):
@@ -216,11 +230,8 @@ class WindowMotion(QObject):
 def align_order_footer(dialog):
     from PyQt5.QtWidgets import QHBoxLayout,QPushButton,QDialogButtonBox,QScrollArea
     if getattr(dialog,"_aligned_footer",False):return
-    names={"Добавить работников","Добавить работы","Удалить выбранных","Выгрузить в Excel","Выгрузить в EXCEL"}
+    names={"Добавить работников","Добавить работы","Удалить выбранных","Столбцы по умолч.","Выгрузить в Excel","Выгрузить в EXCEL"}
     buttons=[button for button in dialog.findChildren(QPushButton) if button.text() in names]
-    export_group = getattr(dialog, "export_actions", None)
-    if export_group is not None:
-        buttons = [button for button in buttons if button is not dialog.export_current_btn]
     boxes=[box for box in dialog.findChildren(QDialogButtonBox) if any(b.text() in {"Сохранить","Отмена"} for b in box.buttons())]
     if not buttons or not boxes:return
     def detach(layout,widget):
@@ -229,7 +240,7 @@ def align_order_footer(dialog):
             child=layout.itemAt(i).layout()
             if child is not None:detach(child,widget)
     layout=dialog.layout();box=boxes[-1]
-    for widget in [*buttons,box, *([export_group] if export_group is not None else [])]:
+    for widget in [*buttons,box]:
         parent=widget.parentWidget()
         if parent is not None and parent.layout() is not None:detach(parent.layout(),widget)
     content=QWidget();row=QHBoxLayout(content);row.setContentsMargins(0,0,0,0);row.setSpacing(8)
@@ -238,12 +249,6 @@ def align_order_footer(dialog):
         if button not in export:row.addWidget(button)
     row.addStretch();row.addWidget(box)
     for button in export:row.addWidget(button)
-    if export_group is not None:
-        row.addWidget(export_group)
-        height = max(42, dialog.export_current_btn.fontMetrics().height() + 20)
-        export_group.setFixedHeight(height)
-        for button in export_group.findChildren(QPushButton):
-            button.setFixedHeight(height - 2)
     for button in [*buttons,*box.buttons()]:button.setFixedHeight(max(42,button.fontMetrics().height()+20))
     scroll=QScrollArea();scroll.setObjectName("OrderActionFooter");scroll.setWidgetResizable(True);scroll.setFrameShape(QFrame.NoFrame);scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff);scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
     scroll.setWidget(content);scroll.setFixedHeight(max(b.height() for b in [*buttons,*box.buttons()])+18);layout.addWidget(scroll)

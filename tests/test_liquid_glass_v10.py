@@ -5,7 +5,6 @@ from decimal import Decimal
 
 from PyQt5.QtCore import QEvent, QPoint, QPointF, Qt
 from PyQt5.QtGui import QFontMetrics, QMouseEvent
-from PyQt5.QtPrintSupport import QPrinter
 from PyQt5.QtTest import QTest
 from PyQt5.QtWidgets import QApplication, QDialogButtonBox, QTextBrowser
 
@@ -140,58 +139,6 @@ def test_history_popup_contains_actor_work_time_and_changed_values(glass, app):
     dialog = owner._history_details_dialog
     assert "chief" in dialog.findChild(QTextBrowser).toPlainText()
     dialog.reject()
-
-
-def test_print_pdf_fits_columns_and_keeps_fourteen_point_type(system, app, tmp_path):
-    import fitz
-    from smartorder.order_printing import configure_printer, print_document
-    manager, admin = system
-    db, identity, *_ = order(manager, admin, "packaging")
-    saved = db.get_order(identity)
-    saved["lines"] = [deepcopy(saved["lines"][0]) for _ in range(36)]
-    document = print_document(saved)
-    assert document.defaultFont().family() == "Times New Roman"
-    assert document.defaultFont().pointSize() == 14
-    printer = QPrinter(QPrinter.HighResolution)
-    printer.setOutputFormat(QPrinter.PdfFormat)
-    printer.setOutputFileName(str(tmp_path / "order.pdf"))
-    configure_printer(printer)
-    document.print_(printer)
-    pdf = fitz.open(tmp_path / "order.pdf")
-    assert len(pdf) >= 2
-    text = "".join(page.get_text() for page in pdf)
-    assert "ИТОГО" in text and "001" in text
-    for page in pdf:
-        for block in page.get_text("dict")["blocks"]:
-            for line in block.get("lines", []):
-                for span in line["spans"]:
-                    assert span["bbox"][2] <= page.rect.width + 1
-                    assert span["size"] >= 13.9
-
-
-def test_print_dialog_keeps_native_window_and_selected_order(glass, app, monkeypatch):
-    from PyQt5.QtPrintSupport import QPrintDialog, QPageSetupDialog
-    from smartorder import order_printing
-    owner, manager, admin = glass
-    db, identity, *_ = populate(app, glass)
-    printer = QPrinter()
-    for kind in (QPrintDialog, QPageSetupDialog):
-        dialog = kind(printer, owner)
-        dialog.ensurePolished()
-        assert not dialog.property("glassOverlay")
-        assert not dialog.windowFlags() & Qt.FramelessWindowHint
-        assert not dialog.testAttribute(Qt.WA_TranslucentBackground)
-        dialog.deleteLater()
-    printed = []
-    monkeypatch.setattr(order_printing, "request_print", lambda saved, parent: printed.append(saved))
-    owner.orders_table.selectRow(0)
-    owner._publish_glass_state(force=True)
-    drain(app, lambda: not javascript(app, owner, 'document.getElementById("print").disabled'))
-    javascript(app, owner, 'document.getElementById("print").click()')
-    drain(app, lambda: len(printed) == 1)
-    assert printed[0]["info"]["id"] == identity
-    widths = javascript(app, owner, '["export","print"].map(id=>document.getElementById(id).getBoundingClientRect().width)')
-    assert abs(widths[0] - widths[1]) <= 1
 
 
 def test_help_icon_context_and_master_only_tour(glass, app):

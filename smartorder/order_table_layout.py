@@ -146,3 +146,13 @@ class EditorColumnLayout(QObject):
             self.settings.editor_column_weights = list(self.weights)
             self.store.save(self.settings)
             self.dirty = False
+
+    def reset(self):
+        """Restore the original proportions for this and future orders."""
+        self.dragging = False
+        self.changed = None
+        self.weights = list(DEFAULT_WEIGHTS)
+        self.settings.editor_column_weights = []
+        self.store.save(self.settings)
+        self.dirty = False
+        self.fit()

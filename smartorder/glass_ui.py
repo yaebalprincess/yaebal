@@ -8,11 +8,12 @@ from __future__ import annotations
 from .i18n import source_text, item_source, tr
 
 import hashlib
+import base64
 import json
 import logging
 from pathlib import Path
 
-from PyQt5.QtCore import (QDate, QEvent, QObject, QPoint, QSize, Qt, QTimer, QUrl,
+from PyQt5.QtCore import (QBuffer, QIODevice, QDate, QEvent, QObject, QPoint, QRect, QSize, Qt, QTimer, QUrl,
                           pyqtSignal, pyqtSlot)
 from PyQt5.QtGui import QColor, QKeyEvent
 from PyQt5.QtWebChannel import QWebChannel
@@ -29,10 +30,10 @@ from .workshops import WORKSHOPS, allowed_workshops
 
 log = logging.getLogger(__name__)
 ASSET_ROOT = resource_path("smartorder/glass")
-ACTIONS = frozenset({"ready", "painted", "select", "filter", "date", "date_range", "create", "edit", "print",
+ACTIONS = frozenset({"ready", "painted", "select", "filter", "date", "date_range", "create", "edit",
                      "export", "delete", "open", "view", "history", "tab",
                      "columns", "theme", "zoom", "refresh", "workshop", "notifications", "help", "all_orders",
-                     "minimize", "maximize", "close", "move", "resize", "fullscreen"})
+                     "minimize", "maximize", "close", "move", "resize", "fullscreen", "training_stop"})
 
 
 def row_key(ref):
@@ -268,7 +269,7 @@ class MainWindow(EnterpriseWindow):
             self._schedule_glass_state()
 
     def _glass_buttons(self):
-        return {"create": self.create_order_btn, "edit": self.edit_order_btn, "print": self.print_order_btn,
+        return {"create": self.create_order_btn, "edit": self.edit_order_btn,
                 "export": self.export_order_btn, "delete": self.delete_draft_btn}
 
     def _glass_status(self):
@@ -307,7 +308,7 @@ class MainWindow(EnterpriseWindow):
             empty_message = "У вас нет несохранённых черновиков."
         else:
             empty_message = "Для начала работы создайте наряд." if self.can(Permission.ORDERS_CREATE) else "Наряды пока не созданы."
-        return {
+        state = {
             "language": self.ui_settings.language, "translations": web_catalog(self.ui_settings.language),
             "columns": self.ui_settings.order_columns,
             "emptyMessage": tr(empty_message),
@@ -343,14 +344,38 @@ class MainWindow(EnterpriseWindow):
             "maximized": self.isMaximized() or self.isFullScreen(),
             "fullscreen": self.isFullScreen()
         }
+        tour=getattr(self,"_master_tour",None)
+        return tour.main_state(state) if tour is not None and tour.running else state
 
     def _publish_glass_state(self, force=False):
         if not self._glass_ready or self._glass is None or self._live_closed:
             return
+        self._renderer_background()
         encoded = json.dumps(self.glass_state(), ensure_ascii=False, separators=(",", ":"))
         if force or encoded != self._glass_last_state:
             self._glass_last_state = encoded
             self._glass.bridge.stateChanged.emit(encoded)
+
+    def _renderer_background(self):
+        """Opaque renderer, sampling the same artwork as the native shell."""
+        from .appearance import appearance_of, wallpaper_path
+        shell=self._legacy_shell
+        origin=self._glass.mapTo(shell,QPoint())
+        key=(shell.size(),self._glass.size(),origin,self.ui_settings.theme,
+             str(wallpaper_path(appearance_of(self))))
+        if key==getattr(self,"_renderer_background_key",None) or self._glass.width()<1:return
+        backdrop=getattr(shell,"_liquid_backdrop",None)
+        if backdrop is None:return
+        frame=backdrop.frame();ratio=frame.devicePixelRatioF()
+        crop=frame.copy(QRect(round(origin.x()*ratio),round(origin.y()*ratio),
+                              round(self._glass.width()*ratio),round(self._glass.height()*ratio)))
+        buffer=QBuffer();buffer.open(QIODevice.WriteOnly);crop.save(buffer,"PNG")
+        url="data:image/png;base64,"+base64.b64encode(bytes(buffer.data())).decode("ascii")
+        color="#15273e" if self.ui_settings.theme=="dark" else "#dcebf7"
+        self._glass.page().setBackgroundColor(QColor(color))
+        script="document.body.style.backgroundColor="+json.dumps(color)+";document.body.style.backgroundImage="+json.dumps('url("'+url+'")')+";document.body.style.backgroundSize='100% 100%';"
+        self._glass.page().runJavaScript(script)
+        self._renderer_background_key=key
 
     def _retry_initial_state(self):
         if self._live_closed or self._glass_painted:
@@ -367,6 +392,8 @@ class MainWindow(EnterpriseWindow):
             return
         self._glass_error = True
         self._glass_ready = False
+        tour=getattr(self,"_master_tour",None)
+        if tour is not None and tour.running:tour.finish()
         self._glass_stack.setCurrentWidget(self._native_orders)
         if getattr(self,"_startup_cover",None) is not None:self._startup_cover.hide()
         QTimer.singleShot(0, lambda: QMessageBox.warning(
@@ -401,7 +428,7 @@ class MainWindow(EnterpriseWindow):
             self._glass_painted=True
             if hasattr(self,"_initial_state_timer"):self._initial_state_timer.stop()
             if self._glass is not None:
-                self._glass.page().setBackgroundColor(QColor(Qt.transparent))
+                self._glass.page().setBackgroundColor(QColor("#15273e" if self.ui_settings.theme=="dark" else "#dcebf7"))
                 self._glass.update()
             if getattr(self,"_startup_cover",None) is not None:self._startup_cover.hide()
             return
@@ -409,7 +436,7 @@ class MainWindow(EnterpriseWindow):
             return
         if self._glass_busy and action not in {"minimize", "move", "resize"}:
             return
-        native = action in {"create", "edit", "export", "print", "delete", "open", "view", "date", "history"}
+        native = action in {"create", "edit", "export", "delete", "open", "view", "date", "history"}
         if native:
             self._glass_busy = True
             self._publish_glass_state()
@@ -427,11 +454,12 @@ class MainWindow(EnterpriseWindow):
 
     def _execute_glass_command(self, action, data):
         tour=getattr(self,"_master_tour",None)
-        if tour is not None and tour.running and action in {"create","edit","open","view","history","delete","print","export","workshop","filter","date","date_range","tab"}:
-            if action=="create" and tour.key=="create" or action=="history" and tour.key=="history" or action=="tab" and tour.key=="administration" and data.get("index")==3:
+        if tour is not None and tour.running:
+            if action=="training_stop":tour.request_finish()
+            elif action=="create" and tour.key=="create" or action in {"edit","open"} and tour.key=="edit" or action=="history" and tour.key=="history" or action=="tab" and tour.key=="administration" and data.get("index")==3:
                 tour.click_target()
             return
-        if action in {"select", "filter", "date", "date_range", "create", "edit", "export", "print", "delete", "open", "view", "history"}:
+        if action in {"select", "filter", "date", "date_range", "create", "edit", "export", "delete", "open", "view", "history"}:
             if not self._orders_allowed() or not self.can(Permission.ORDERS_VIEW):
                 return
         if action == "select":
@@ -462,7 +490,7 @@ class MainWindow(EnterpriseWindow):
             first, last = QDate.fromString(start, "yyyy-MM-dd"), QDate.fromString(end, "yyyy-MM-dd")
             if first.isValid() and last.isValid():
                 self.order_filter_date.setDateRange(first, last)
-        elif action in {"edit", "export", "print", "delete", "open", "view"}:
+        elif action in {"edit", "export", "delete", "open", "view"}:
             # Commands carry a stable row handle, never a potentially stale index.
             if not self._select_glass_row(data.get("key")) or self._selected_ref() is None:
                 return
@@ -474,8 +502,6 @@ class MainWindow(EnterpriseWindow):
                 self.edit_order()
             elif action == "export" and self.can(Permission.ORDERS_EXPORT) and self.export_order_btn.isEnabled():
                 self.export_order()
-            elif action == "print" and self.can(Permission.ORDERS_EXPORT) and self.print_order_btn.isEnabled():
-                self.print_order()
             elif action == "delete" and self.delete_draft_btn.isEnabled() and not self.user.has_any_role(ACCOUNTING_ROLES):
                 self.delete_selected_draft()
         elif action == "create" and self.can(Permission.ORDERS_CREATE):
@@ -528,25 +554,13 @@ class MainWindow(EnterpriseWindow):
             self.windowHandle().startSystemResize(Qt.RightEdge | Qt.BottomEdge)
 
     def _capture_tab_frame(self, index):
+        # Capturing an OpenGL/Chromium child while it is detached from the
+        # visible tab can briefly clear its compositor to black on Windows.
+        # Every page now paints on an opaque, prepared background instead.
         self._tab_frame = None
-        page = self.tabs.currentWidget()
-        motion = getattr(self, "_window_motion", None)
-        if (index >= 0 and index != self.tabs.currentIndex() and self.tabs.isTabEnabled(index)
-                and page is not None and page.isVisible()
-                and (motion is None or not motion.running)):
-            self._tab_frame = (index, page.grab())
 
     def _tab_changed(self, index):
-        frame, self._tab_frame = self._tab_frame, None
-        effect = None
-        if frame is not None and frame[0] == index:
-            from .liquid_effects import transition_to
-            effect = transition_to(self.tabs.widget(index), frame[1], hold=True)
-        try:
-            super()._tab_changed(index)
-        finally:
-            if effect is not None:
-                effect.fade()
+        super()._tab_changed(index)
         if self._glass is not None:
             self._schedule_glass_state()
 

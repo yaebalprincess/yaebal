@@ -165,8 +165,7 @@
       $(name).disabled = !action.enabled;
     }
     $("order-actions").style.setProperty("grid-template-columns", "");
-    $("export-group").hidden = !state.actions.export.visible && !state.actions.print.visible;
-    const visibleActions = Object.entries(state.actions).filter(([name, action]) => name !== "print" && action.visible).length;
+    const visibleActions = Object.values(state.actions).filter(action => action.visible).length;
     if (window.innerWidth > 1000) $("order-actions").style.gridTemplateColumns = "repeat(" + Math.max(1, visibleActions) + ", minmax(0, 1fr))";
     renderRows(state.rows);
     $("empty-orders").hidden=state.rows.length>0||!state.allowed||state.busy;
@@ -274,7 +273,7 @@
   });
   // Also used by the local screenshot/interaction checks. No sample records
   // or fake account are loaded by the production page.
-  window.SmartOrderView = Object.freeze({render, bindTransport(callback) { transport = callback; }});
+  window.SmartOrderView = Object.freeze({render, command:send, bindTransport(callback) { transport = callback; }});
   if (window.qt && window.qt.webChannelTransport && typeof QWebChannel !== "undefined") {
     new QWebChannel(window.qt.webChannelTransport, channel => {
       const bridge = channel.objects.orders;

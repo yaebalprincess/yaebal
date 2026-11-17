@@ -297,7 +297,8 @@ html[data-theme="dark"] .calendar-footer .calendar-apply { background: linear-gr
 @media print { .glass-popover { animation: none !important; transform: none; opacity: 1; } }
 
 /* v4: the native shell owns the single title bar, scale and tab navigation. */
-html[data-embedded="true"], html[data-embedded="true"] body { background: transparent; }
+html[data-embedded="true"], html[data-embedded="true"] body { background-color:#dcebf7; }
+html[data-embedded="true"][data-theme="dark"],html[data-embedded="true"][data-theme="dark"] body{background-color:#15273e;}
 html[data-embedded="true"] .app-shell { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; min-height: 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
 html[data-embedded="true"] .app-shell::after { display: none; }
 html[data-embedded="true"] .titlebar, html[data-embedded="true"] .scale-toolbar, html[data-embedded="true"] .tabs, html[data-embedded="true"] .resize-corner { display: none; }
@@ -310,9 +311,6 @@ body { font-family: var(--font-body-family, "Segoe UI"), sans-serif; font-size: 
 .filter-label { font-family: inherit; font-size: inherit; }
 
 .order-actions{position:relative;min-height:44px;}
-.export-split{display:flex;min-width:0;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
-.export-split .action-button{flex:1;width:50%;min-width:0;border:0;border-radius:0;white-space:normal;}
-.export-split .action-button:first-child{border-right:1px solid var(--line);}
 .order-actions .access-overlay{border-radius:9px;font-size:1.1rem;}
 /* Use individual offsets for Qt WebEngine builds that predate CSS inset. */
 .empty-orders {

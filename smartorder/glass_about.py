@@ -45,6 +45,26 @@ class DownloadGuideButton(QToolButton):
             QMessageBox.warning(self.owner, "Руководство пользователя", str(exc))
 
 
+class PhotosensitivityWarning(QFrame):
+    def __init__(self, theme):
+        super().__init__()
+        self.setObjectName("PhotosensitivityWarning")
+        self.setProperty("plainSurface",True)
+        layout=QVBoxLayout(self);layout.setContentsMargins(22,18,22,18);layout.setSpacing(10)
+        title=QLabel("ПРЕДУПРЕЖДЕНИЕ ОБ ЭПИЛЕПСИИ")
+        title.setObjectName("PhotosensitivityTitle");title.setWordWrap(True)
+        body=QLabel("У некоторых людей могут возникать приступы под воздействием вспышек света и мелькающих изображений, даже если им никогда не ставили диагноз «эпилепсия». В интерфейсе используются анимации и световые эффекты.")
+        body.setWordWrap(True);body.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(title);layout.addWidget(body);self.setTheme(theme)
+
+    def setTheme(self, theme):
+        from .liquid_style import colors
+        c=colors(theme=="dark");self.setProperty("theme",theme)
+        self.setStyleSheet(f'''QFrame#PhotosensitivityWarning{{background:{c['glass']};border:1px solid {c['edge']};border-radius:16px;}}
+QLabel{{background:transparent;color:{c['muted']};font-size:15px;}}
+QLabel#PhotosensitivityTitle{{color:{c['ink']};font-size:18px;font-weight:600;}}''')
+
+
 def build_about_page(owner):
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)
@@ -122,15 +142,23 @@ def build_about_page(owner):
         frame.layout().addStretch()
     root.addWidget(ResponsiveGrid(cards, min_cell_width=380, max_columns=3))
 
-    footer = QTextBrowser()
+    warning=PhotosensitivityWarning(owner.ui_settings.theme)
+    owner.photosensitivity_warning=warning
+    root.addWidget(warning)
+
+    footer_panel=QFrame();footer_panel.setObjectName("LiquidCard")
+    footer_layout=QVBoxLayout(footer_panel);footer_layout.setContentsMargins(0,0,0,0)
+    footer = QLabel()
     footer.setObjectName("AboutFooter")
-    footer.setOpenLinks(False)
-    footer.setHtml('<span>Powered by OITS&amp;ZI · Copyright © 2026 </span>'
+    footer.setTextFormat(Qt.RichText)
+    footer.setTextInteractionFlags(Qt.TextBrowserInteraction)
+    footer.setText('<span>Powered by OITS&amp;ZI · Copyright © 2026 </span>'
                    '<a href="https://tmbsir.ru/" style="color:#0785ff;text-decoration:underline">tmbsir</a>')
-    footer.setMaximumHeight(56)
-    footer.anchorClicked.connect(QDesktopServices.openUrl)
+    footer.setMargin(12);footer.setMinimumHeight(52);footer.setWordWrap(True)
+    footer.setOpenExternalLinks(True)
+    footer_layout.addWidget(footer)
     root.addStretch(1)
-    root.addWidget(footer)
+    root.addWidget(footer_panel)
     owner.about_session_label = QLabel()
     owner.about_session_label.setObjectName("SessionLabel")
     owner.about_session_label.setAlignment(Qt.AlignRight)

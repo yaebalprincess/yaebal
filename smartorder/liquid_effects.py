@@ -56,7 +56,8 @@ class GlassBackdrop(QWidget):
         self.lower()
         self.show()
 
-    def paintEvent(self, event):
+    def frame(self):
+        """Render artwork without grabbing a live Chromium/native surface."""
         app = QApplication.instance()
         dark = theme_of(self.parentWidget()) == "dark"
         source_path = wallpaper_path(appearance_of(self.parentWidget()))
@@ -84,6 +85,11 @@ class GlassBackdrop(QWidget):
             p.fillRect(self.rect(), tint)
             p.end()
             self._cache_key = key
+        return self._cache
+
+    def paintEvent(self, event):
+        self.frame()
+        dark = theme_of(self.parentWidget()) == "dark"
         p = QPainter(self)
         p.drawPixmap(0, 0, self._cache)
         p.setRenderHint(QPainter.Antialiasing)
@@ -247,6 +253,9 @@ class LiquidController(QObject):
     def style_widget(self, widget, theme):
         if sip.isdeleted(widget):
             return
+        from .help_surface import plain_surface
+        if plain_surface(widget):
+            return
         if isinstance(widget.window(), NATIVE_DIALOGS):
             return
         if getattr(widget, "_liquid_applied_theme", None) == theme: return
@@ -315,6 +324,9 @@ class LiquidController(QObject):
         widget._liquid_applied_theme = theme
 
     def apply(self, root, theme=None):
+        from .help_surface import plain_surface
+        if plain_surface(root):
+            return
         if self._styling or sip.isdeleted(root) or legacy_surface(root):
             return
         if isinstance(root.window(), NATIVE_DIALOGS):
@@ -353,7 +365,8 @@ class LiquidController(QObject):
             return False
         kind = event.type()
         window = widget.window()
-        if isinstance(window, NATIVE_DIALOGS) or widget.property("plainSurface") or window.property("plainSurface"):
+        from .help_surface import plain_surface
+        if isinstance(window, NATIVE_DIALOGS) or plain_surface(widget):
             return False
         overlay = self.is_overlay(widget)
         if kind == QEvent.Polish and overlay:

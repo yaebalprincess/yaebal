@@ -90,13 +90,13 @@ def show_training_start(owner):
     old=getattr(owner,"_master_tour",None)
     if old is not None:old.finish()
     from .help_surface import opaque_help,center_dialog
-    dialog=QDialog(owner)
-    opaque_help(dialog,owner.ui_settings.theme)
+    from .training_overlay import TutorialDialog
+    dialog=TutorialDialog(owner)
     dialog.setObjectName("TrainingStart")
     dialog.setWindowTitle("Обучение: как работать с нарядами?")
     dialog.setWindowModality(Qt.WindowModal)
     dialog.setAttribute(Qt.WA_DeleteOnClose)
-    dialog.setFixedWidth(540)
+    dialog.setFixedWidth(660)
     layout=QVBoxLayout(dialog);layout.setContentsMargins(24,22,24,22);layout.setSpacing(16)
     title=QLabel("Обучение: как работать с нарядами?",dialog)
     title.setObjectName("TrainingTitle");title.setWordWrap(True);title.setAlignment(Qt.AlignCenter);layout.addWidget(title)

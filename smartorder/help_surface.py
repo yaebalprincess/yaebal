@@ -3,6 +3,15 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QPalette
 
 
+def plain_surface(widget):
+    """Explicit help styling belongs to the whole subtree, including children."""
+    while widget is not None:
+        if widget.property("plainSurface"):
+            return True
+        widget = widget.parentWidget()
+    return False
+
+
 def opaque_help(widget, theme):
     dark=theme=="dark"
     base,paper,ink,muted,edge=("#192e46","#213c56","#e7f2ff","#b1c6df","#557492") if dark else ("#eef7ff","#ffffff","#102b50","#425f80","#b6d3ec")
@@ -27,6 +36,17 @@ QPushButton#PrimaryButton{{background:#087bfa;color:#ffffff;border-color:#168cf5
 QPushButton:disabled{{color:{muted};}}
 ''')
     return ink
+
+
+def tutorial_style(widget, theme):
+    opaque_help(widget, theme)
+    widget.setStyleSheet(widget.styleSheet()+'''
+QWidget {font-family:"Segoe UI",Arial,sans-serif;font-size:16px;}
+QLabel#TrainingTitle {font-size:24px;font-weight:700;}
+QLabel#TrainingKicker {font-size:12px;font-weight:600;}
+QPushButton {font-size:16px;font-weight:600;padding:10px 18px;min-height:28px;min-width:0;}
+QScrollArea,QScrollArea>QWidget,QScrollArea>QWidget>QWidget {border:0;background:transparent;}
+''')
 
 
 def center_dialog(dialog, owner, preferred_size=None):

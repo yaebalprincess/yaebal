@@ -7,6 +7,7 @@
   <title>Smart Order — Формирование нарядов на работу</title>
   <script src="bootstrap.js"></script>
   <link rel="stylesheet" href="orders.css">
+  <link rel="stylesheet" href="training.css">
 </head>
 <body>
   <svg class="icon-definitions" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -68,10 +69,7 @@
 
               <button class="action-button primary" data-action="create" id="create">Создать наряд</button>
               <button class="action-button secondary" data-action="edit" id="edit" disabled>Редактировать</button>
-              <div class="export-split" id="export-group">
-                <button class="action-button secondary" data-action="export" id="export" disabled>Выгрузить в Excel</button>
-                <button class="action-button secondary" data-action="print" id="print" disabled>Прямая печать</button>
-              </div>
+              <button class="action-button secondary" data-action="export" id="export" disabled>Выгрузить в Excel</button>
               <button class="action-button danger" data-action="delete" id="delete" disabled>Удалить черновик</button>
             </div>
           </div>
@@ -120,5 +118,6 @@
   <script src="glass-popovers.js"></script>
   <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
   <script src="orders.js"></script>
+  <script src="training.js"></script>
 </body>
 </html>

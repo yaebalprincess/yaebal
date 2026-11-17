@@ -10,7 +10,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from PyQt5.QtCore import Qt, QEvent, QObject, QTimer, QRectF, QPointF, QPropertyAnimation, QEasingCurve, pyqtProperty, QUrl
+from PyQt5.QtCore import Qt, QEvent, QObject, QTimer, QRectF, QPointF, QPropertyAnimation, QEasingCurve, pyqtProperty, pyqtSignal, QUrl
 from PyQt5.QtGui import QColor, QPainter, QPen, QLinearGradient, QRadialGradient, QPainterPath, QFont, QDesktopServices
 from PyQt5.QtWidgets import (QApplication, QWidget, QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QSizePolicy,
     QDialog, QDialogButtonBox, QRadioButton, QButtonGroup, QScrollArea, QSizeGrip, QTextBrowser, QMessageBox, QMenu, QActionGroup, QToolButton, QListWidgetItem, QProgressBar)
@@ -228,6 +228,7 @@ def read_update_announcement():
 
 
 class MainWindow(RC18MainWindow):
+    accountSwitchRequested=pyqtSignal()
     def __init__(self,db,user,manager=None,tracker=None):
         self.workshop_manager=manager or (db.manager if isinstance(db,WorkshopDatabase) else WorkshopManager(db))
         allowed=allowed_workshops(user)
@@ -425,14 +426,6 @@ class MainWindow(RC18MainWindow):
         old.hide();old.deleteLater();self.orders_table=view
         from .workspace_ui import EmptyTableMessage
         self.native_empty_orders=EmptyTableMessage(view,"Для начала работы создайте наряд.")
-        from .export_actions import ExportActions
-        actions_host = self.export_order_btn.parentWidget()
-        position = actions_host._widgets.index(self.export_order_btn)
-        self.export_actions = ExportActions(self.export_order_btn, self.print_order, actions_host)
-        actions_host._widgets[position] = self.export_actions
-        actions_host._columns = 0
-        actions_host._relayout()
-        self.print_order_btn = self.export_actions.print
 
         self.draft_bar = QFrame(view.parentWidget())
         self.draft_bar.setObjectName("GlassPanel")
@@ -793,6 +786,7 @@ class MainWindow(RC18MainWindow):
         apply_apple_design(self,self.ui_settings.theme,self.ui_settings.zoom)
         if hasattr(self,"titlebar"):self.titlebar.set_theme(self.ui_settings.theme)
         self._apply_admin_filter_theme();self._apply_native_titlebars()
+        if hasattr(self,"photosensitivity_warning"):self.photosensitivity_warning.setTheme(self.ui_settings.theme)
         if self.analytics is not None and self.analytics.isVisible():self.analytics.set_theme(self.ui_settings.theme)
 
     def toggle_window_mode(self,fullscreen=True):
@@ -843,7 +837,9 @@ class MainWindow(RC18MainWindow):
 
     def edit_order(self):
         tour=getattr(self,"_master_tour",None)
-        if tour is not None and tour.running:return
+        if tour is not None and tour.running:
+            if tour.key=="edit":tour.click_target()
+            return
         return super().edit_order()
 
     def delete_selected_draft(self):
@@ -852,6 +848,10 @@ class MainWindow(RC18MainWindow):
         return super().delete_selected_draft()
 
     def _open_selected(self):
+        tour=getattr(self,"_master_tour",None)
+        if tour is not None and tour.running:
+            if tour.key=="edit":tour.click_target()
+            return
         if not self.can(Permission.ORDERS_VIEW):return
         ref=self._selected_ref()
         if isinstance(ref,int) and not self.can(Permission.ORDERS_EDIT):
@@ -895,18 +895,6 @@ class MainWindow(RC18MainWindow):
             code,callback=actions[result]
             try:self.workshop_manager.require(self.user,code);callback()
             except Exception as exc:QMessageBox.warning(self,tr("Недоступно"),str(exc))
-
-    def print_order(self):
-        from .order_printing import request_print
-        try:
-            self.workshop_manager.require(self.user, Permission.ORDERS_EXPORT)
-            identity = self._selected_order_id()
-            if identity is not None:
-                order = self.db.get_order(identity)
-                if order is not None:
-                    request_print(order, self)
-        except Exception as exc:
-            QMessageBox.warning(self, tr("Прямая печать"), str(exc))
 
     def _update_permission_controls(self):
         if not hasattr(self,"tabs"):return
@@ -1276,6 +1264,16 @@ class MainWindow(RC18MainWindow):
         from .interaction_ui import WorkshopPopup
         self.workshop_menu=WorkshopPopup(self)
         self.workshop_menu.popup(self.titlebar.badge.mapToGlobal(self.titlebar.badge.rect().bottomLeft())+QPointF(0,4).toPoint())
+
+    def switch_account(self):
+        if self._live_closed or getattr(self,"_workshop_switching",False) or getattr(self,"_account_switch_prompt",False):return
+        menu=getattr(self,"workshop_menu",None)
+        if menu is not None:menu.hide()
+        self._account_switch_prompt=True
+        try:
+            answer=heavy_ui.question(self,"Сменить аккаунт","Вы уверены, что хотите выйти из аккаунта?")
+        finally:self._account_switch_prompt=False
+        if answer==QMessageBox.Yes:self.accountSwitchRequested.emit()
 
     def _switch_to_workshop(self,key):
         if key==self.workshop or getattr(self,"_workshop_switching",False) or key not in allowed_workshops(self.user):return self
