@@ -1,3 +1,13 @@
+# Smart Order · Liquid Glass v13
+
+[Скачать Smart Order 1.0.13 для сборки под Windows (ZIP)](https://github.com/yaebalprincess/yaebal/archive/refs/heads/smartorder-liquid-glass-v13.zip) · [Запуск, сборка и снимки экрана](https://github.com/yaebalprincess/yaebal/tree/smartorder-liquid-glass-v13)
+
+В обучении мастера исправлены подсказки у кнопок «Создать наряд», «Редактировать» и у истории. При выборе работы подсвечивается вся строка. Во время редактирования карточка располагается под сотрудником. После последнего шага в администрировании заполняется квадрат «Обучение». В меню появилась надпись «Сменить пользователя».
+
+Размытие учебного фона уменьшено вдвое. На стенде Linux с Qt 5.15.2 медианное время смены темы в рамке и списке нарядов сократилось с 494 до 74 мс за восемь переключений. Прошли 144 автоматические проверки. В скачанном ZIP сверены все 209 файлов. Для сборки в Windows нужны Python 3.12 x64 и папка `resources` из вашей установки.
+
+---
+
 # Smart Order · Liquid Glass v12
 
 - [Скачать SmartOrder v12 — ZIP исходников](https://github.com/yaebalprincess/yaebal/archive/refs/heads/smartorder-liquid-glass-v12.zip)
