@@ -153,5 +153,5 @@ def test_tab_switch_does_not_grab_renderer_and_keeps_opaque_frame(glass,app,monk
         owner.tabs.setCurrentIndex(index);app.processEvents()
     owner._publish_glass_state(force=True)
     drain(app,lambda:owner._glass.page().backgroundColor().alpha()==255)
-    assert javascript(app,owner,'getComputedStyle(document.body).backgroundImage.startsWith("url(\\\"data:image/png;base64,")')
+    assert "factory-glass.png" in javascript(app,owner,'getComputedStyle(document.body,"::before").backgroundImage')
     assert javascript(app,owner,'getComputedStyle(document.body).backgroundColor')!="rgba(0, 0, 0, 0)"

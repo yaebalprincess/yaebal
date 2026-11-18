@@ -11,9 +11,10 @@ import hashlib
 import base64
 import json
 import logging
+import math
 from pathlib import Path
 
-from PyQt5.QtCore import (QBuffer, QIODevice, QDate, QEvent, QObject, QPoint, QRect, QSize, Qt, QTimer, QUrl,
+from PyQt5.QtCore import (QDate, QEvent, QObject, QPoint, QRect, QSize, Qt, QTimer, QUrl,
                           pyqtSignal, pyqtSlot)
 from PyQt5.QtGui import QColor, QKeyEvent
 from PyQt5.QtWebChannel import QWebChannel
@@ -144,6 +145,10 @@ class MainWindow(EnterpriseWindow):
         self._web_rows = []
         self._web_row_indices = {}
         self._glass_error = False
+        self._renderer_theme = None
+        self._theme_revision = 0
+        self._wallpaper_source = None
+        self._renderer_geometry = None
         self._tab_frame = None
         super().__init__(db, user, manager, tracker)
         self._legacy_shell = self.centralWidget()
@@ -177,7 +182,6 @@ class MainWindow(EnterpriseWindow):
         for signal in (history_model.rowsInserted, history_model.rowsRemoved,
                        history_model.modelReset, history_model.dataChanged):
             signal.connect(self._schedule_glass_state)
-        self.theme.toggled.connect(self._schedule_glass_state)
         self.zoom.valueChanged.connect(lambda *_:None if self.zoom.isSliderDown() else self._schedule_glass_state())
         self._glass_chrome_timer = QTimer(self)
         self._glass_chrome_timer.setInterval(500)
@@ -315,7 +319,7 @@ class MainWindow(EnterpriseWindow):
             "draftView": self._draft_view,
             "embedded": True, "currentTab": self.tabs.currentIndex(),
             "appearance": self.ui_settings.appearance,
-            "theme": self.ui_settings.theme, "zoom": self.ui_settings.zoom,
+            "theme": self.ui_settings.theme, "themeRevision": self._theme_revision, "zoom": self.ui_settings.zoom,
             "username": self.user.username, "role": " · ".join(tr(role) for role in split_roles(self.user.role)),
             "workshop": tr(WORKSHOPS[self.workshop]), "allowed": allowed,
             "workshopKey": self.workshop,
@@ -356,26 +360,57 @@ class MainWindow(EnterpriseWindow):
             self._glass_last_state = encoded
             self._glass.bridge.stateChanged.emit(encoded)
 
+    def _apply_theme(self):
+        # Queue the renderer's small palette change before Qt restyles the
+        # native frame. Both can now paint on the same turn.
+        if self._glass is not None and self._glass_ready:
+            self._renderer_background()
+        super()._apply_theme()
+
     def _renderer_background(self):
-        """Opaque renderer, sampling the same artwork as the native shell."""
-        from .appearance import appearance_of, wallpaper_path
-        shell=self._legacy_shell
-        origin=self._glass.mapTo(shell,QPoint())
-        key=(shell.size(),self._glass.size(),origin,self.ui_settings.theme,
-             str(wallpaper_path(appearance_of(self))))
-        if key==getattr(self,"_renderer_background_key",None) or self._glass.width()<1:return
-        backdrop=getattr(shell,"_liquid_backdrop",None)
-        if backdrop is None:return
-        frame=backdrop.frame();ratio=frame.devicePixelRatioF()
-        crop=frame.copy(QRect(round(origin.x()*ratio),round(origin.y()*ratio),
-                              round(self._glass.width()*ratio),round(self._glass.height()*ratio)))
-        buffer=QBuffer();buffer.open(QIODevice.WriteOnly);crop.save(buffer,"PNG")
-        url="data:image/png;base64,"+base64.b64encode(bytes(buffer.data())).decode("ascii")
-        color="#15273e" if self.ui_settings.theme=="dark" else "#dcebf7"
-        self._glass.page().setBackgroundColor(QColor(color))
-        script="document.body.style.backgroundColor="+json.dumps(color)+";document.body.style.backgroundImage="+json.dumps('url("'+url+'")')+";document.body.style.backgroundSize='100% 100%';"
-        self._glass.page().runJavaScript(script)
-        self._renderer_background_key=key
+        """Keep the page aligned with the shell without re-encoding its pixels."""
+        shell = self._legacy_shell
+        view = self._glass
+        if view.width() < 1:
+            return
+        theme = self.ui_settings.theme
+        script = []
+        if theme != self._renderer_theme:
+            self._renderer_theme = theme
+            self._theme_revision += 1
+            view.page().setBackgroundColor(QColor("#15273e" if theme == "dark" else "#dcebf7"))
+            script.append("window.SmartOrderView.applyTheme(" + json.dumps(theme) + "," + str(self._theme_revision) + ");")
+
+        origin = view.mapTo(shell, QPoint())
+        geometry = (shell.width(), shell.height(), origin.x(), origin.y())
+        if geometry != self._renderer_geometry:
+            self._renderer_geometry = geometry
+            width, height, x, y = geometry
+            angle = math.degrees(math.atan2(width, -height))
+            properties = {"--shell-width":f"{width}px", "--shell-height":f"{height}px",
+                          "--shell-left":f"{-x}px", "--shell-top":f"{-y}px", "--shell-angle":f"{angle:.4f}deg"}
+            script.extend("document.body.style.setProperty("+json.dumps(k)+","+json.dumps(v)+");"
+                          for k, v in properties.items())
+
+        appearance = self.ui_settings.appearance or {}
+        source = (appearance.get("background_mode", "builtin"), appearance.get("background_file", ""))
+        if self._wallpaper_source != source:
+            from .appearance import wallpaper_path
+            path = wallpaper_path(appearance)
+            image = 'url("assets/factory-glass.png")'
+            if path is None:
+                image = "none"
+            elif source[0] == "custom":
+                try:
+                    payload = base64.b64encode(path.read_bytes()).decode("ascii")
+                    image = 'url("data:image/png;base64,' + payload + '")'
+                except OSError:
+                    image = "none"
+            script.append("document.body.style.setProperty('--shell-art'," + json.dumps(image) + ");")
+            self._wallpaper_source = source
+
+        if script:
+            view.page().runJavaScript("".join(script))
 
     def _retry_initial_state(self):
         if self._live_closed or self._glass_painted:
@@ -419,6 +454,7 @@ class MainWindow(EnterpriseWindow):
         if self._live_closed:
             return
         if action == "ready":
+            self._renderer_theme = self._wallpaper_source = self._renderer_geometry = None
             self._glass_ready = True
             self._publish_glass_state(force=True)
             self._initial_state_attempts=0
@@ -428,7 +464,6 @@ class MainWindow(EnterpriseWindow):
             self._glass_painted=True
             if hasattr(self,"_initial_state_timer"):self._initial_state_timer.stop()
             if self._glass is not None:
-                self._glass.page().setBackgroundColor(QColor("#15273e" if self.ui_settings.theme=="dark" else "#dcebf7"))
                 self._glass.update()
             if getattr(self,"_startup_cover",None) is not None:self._startup_cover.hide()
             return

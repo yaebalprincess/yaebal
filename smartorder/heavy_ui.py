@@ -1180,6 +1180,8 @@ def _friendly_error(exc) -> str:
 
 def _message(parent, icon, title, text, buttons=QMessageBox.Ok, default=QMessageBox.NoButton):
     box = QMessageBox(parent)
+    if icon == QMessageBox.Question:
+        box.setProperty("smoothGlassCorners", True)
     box.setIcon(icon); box.setWindowTitle(str(title)); box.setText(str(text)); box.setStandardButtons(buttons)
     if default != QMessageBox.NoButton:
         box.setDefaultButton(default)

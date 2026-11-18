@@ -725,7 +725,11 @@ class Database:
         from .account_store import activate_due
         activate_due(self)
         with self.read_conn() as conn:
-            return conn.execute("SELECT u.id,u.username,u.role,COALESCE(u.is_active,1) AS is_active,o.activate_at,o.permissions_json FROM users u LEFT JOIN account_options o ON o.user_id=u.id ORDER BY u.username COLLATE NOCASE").fetchall()
+            return conn.execute("SELECT u.id,u.username,u.role,COALESCE(u.is_active,1) AS is_active,o.activate_at,o.permissions_json, "
+                                "t.completed_at AS training_completed_at FROM users u "
+                                "LEFT JOIN account_options o ON o.user_id=u.id "
+                                "LEFT JOIN master_training t ON t.user_id=u.id "
+                                "ORDER BY u.username COLLATE NOCASE").fetchall()
 
     def add_user(self, actor: SessionUser, username: str, password: str, role: str, *, permissions=None, activate_at=None) -> None:
         from .account_store import validate_actor, normalized_permissions, activation_value

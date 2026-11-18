@@ -1,5 +1,6 @@
 """Click-driven master training with real controls and an isolated practice order."""
 import json
+import sqlite3
 import tempfile
 from datetime import date
 from decimal import Decimal
@@ -10,10 +11,11 @@ from PyQt5.QtCore import QEvent, QObject, QPoint, QRect, Qt, QTimer
 from PyQt5.QtWidgets import (QApplication, QDialog, QDialogButtonBox, QFrame,
                             QLabel, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget)
 
+from .db import DatabaseError
 from .domain import OrderLine, dec
 from .help_surface import center_dialog
 from .i18n import REVERSE
-from .security import ALL_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, Permission, SessionUser
+from .security import ALL_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, Permission, SessionUser, WORKSHOP_ROLES
 from .training_overlay import CoachOverlay, TutorialDialog
 
 
@@ -53,7 +55,7 @@ LESSONS={
  "weight":("Укажите вес коробки","Введите вес одной коробки, например 3 кг, и нажмите «ОК». Итоговый вес и оплата рассчитываются автоматически."),
  "save":("Сохраните учебный наряд","Нажмите «Сохранить». Так завершается создание наряда. Этот пример останется только в обучении."),
  "edit":("Попробуйте редактирование","Здесь показан только ваш учебный наряд. Он уже выбран в списке. Нажмите подсвеченную кнопку «Редактировать». Рабочие наряды вернутся после обучения."),
- "edit_any":("Измените любые данные","Исправьте часы, количество коробок, вес, дату или комментарий учебного наряда. Справа в шапке мигает отметка режима редактирования. После изменения нажмите «ОК» в этой подсказке."),
+ "edit_any":("Измените любые данные","Измените одно из подсвеченных полей, например часы работника, количество коробок или комментарий. Затем нажмите «ОК»."),
  "edit_save":("Сохраните исправление","Нажмите «Сохранить»: появится новая версия, а первоначальные значения останутся в истории."),
  "history":("Посмотрите историю","Здесь отображаются авторы и время изменений. Нажмите на подсвеченный виджет — откроем подробную историю вашего учебного наряда."),
  "administration":("Откройте администрирование","Нажмите вкладку «Администрирование». Покажем только те функции, которые доступны мастеру с вашими правами."),
@@ -72,6 +74,9 @@ class GuidedTour(QObject):
         self.target=QRect();self.host=owner;self.temp=None;self.demo_order=None;self.editing=False
         self._eat_release=False;self._pending=False;self._changing=False;self._confirming=False
         self.layers={};self._edit_baseline=None;self.practice_history=[]
+        self._edit_layout_timer = QTimer(self)
+        self._edit_layout_timer.setSingleShot(True)
+        self._edit_layout_timer.timeout.connect(self.position_target)
         QApplication.instance().installEventFilter(self)
 
     @property
@@ -81,8 +86,19 @@ class GuidedTour(QObject):
 
     def next(self):
         if not self.running or self._pending:return
+        if self.index+1 >= len(self.keys):
+            if self.keys and self.owner.user.id > 0 and WORKSHOP_ROLES.keys() & set(self.owner.user.roles):
+                from .account_store import complete_master_training
+                try:
+                    complete_master_training(self.owner.workshop_manager.auth, self.owner.user)
+                except (DatabaseError, sqlite3.Error, OSError) as exc:
+                    QMessageBox.warning(self.host, "Обучение", f"Не удалось сохранить отметку о прохождении. {exc}\nПовторите последний шаг.")
+                    if self.running:
+                        self.present()
+                    return
+            self.finish(completed=bool(self.keys))
+            return
         self.index+=1
-        if self.index>=len(self.keys):self.finish(completed=True);return
         self.present()
 
     def queue_next(self):
@@ -107,6 +123,9 @@ class GuidedTour(QObject):
         """The practice list is presentation-only; production models stay intact."""
         state.update(rows=[],selected=None,history=[],draftView=False,
                      emptyMessage="Учебная среда: создайте первый наряд.",busy=False,topRestricted=False)
+        layer = self.layers.get(self.owner)
+        if layer is not None and not sip.isdeleted(layer) and layer.web:
+            state["lesson"] = layer.web_config()
         for name,action in state["actions"].items():
             action["enabled"] = name=="create" and self.key=="create" or name=="edit" and self.key=="edit"
         if self.demo_order is not None:
@@ -143,6 +162,11 @@ class GuidedTour(QObject):
         from .heavy_ui import HeavyWorkOrderDialog
         tour=self
         class PracticeEditor(HeavyWorkOrderDialog):
+            def resizeEvent(self, event):
+                super().resizeEvent(event)
+                if hasattr(self, "course_form"):
+                    tour.fit_edit_form(self)
+
             def _save_draft(self):pass
             def _accept(self):tour.save(self)
             def reject(self):
@@ -158,10 +182,32 @@ class GuidedTour(QObject):
             for combo in (dialog.shift,dialog.master,dialog.department):combo.setCurrentIndex(-1)
         self.editor=dialog;self.editing=editing
         self._edit_baseline=dialog.get_data() if editing else None
+        if editing:
+            # Reserve space below the employee even on a short monitor. Only
+            # the practice form scrolls, leaving the real editor layout intact.
+            from PyQt5.QtWidgets import QGroupBox
+            group = dialog.findChild(QGroupBox, "OrderInfoGroup")
+            scroll = QScrollArea(dialog)
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.NoFrame)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            layout = dialog.layout()
+            index = layout.indexOf(group)
+            layout.removeWidget(group)
+            scroll.setWidget(group)
+            layout.insertWidget(index, scroll)
+            dialog.course_form = scroll
+            scroll.verticalScrollBar().valueChanged.connect(self.schedule_edit_targets)
+            self.fit_edit_form(dialog)
         dialog.order_date._popup.dateSelected.connect(lambda value:self.field_done("date"))
         for name in ("shift","master","department"):
             getattr(dialog,name).currentIndexChanged.connect(lambda index,key=name:self.field_done(key) if index>=0 else None)
         dialog.table.itemChanged.connect(self.manual_changed)
+        model = dialog.table.model()
+        for signal in (model.rowsInserted, model.rowsRemoved, dialog.table.verticalScrollBar().valueChanged,
+                       dialog.table.horizontalScrollBar().valueChanged, dialog.table.horizontalHeader().sectionResized,
+                       dialog.table.verticalHeader().sectionResized):
+            signal.connect(self.schedule_edit_targets)
         for field in (dialog.order_date,):field.dateChanged.connect(self.changed_any)
         for combo in (dialog.shift,dialog.master,dialog.department):combo.currentIndexChanged.connect(self.changed_any)
         dialog.comment.textChanged.connect(self.changed_any)
@@ -181,7 +227,27 @@ class GuidedTour(QObject):
         if value is None or not value.is_finite() or value<=0 or wanted==1 and value>24:return
         self.update_confirm()
 
+    def fit_edit_form(self, dialog):
+        scroll = dialog.course_form
+        group_height = scroll.widget().sizeHint().height()
+        if self.key == "edit_any":
+            margins = dialog.layout().contentsMargins()
+            table = dialog.table
+            row_height = table.rowHeight(0) if table.rowCount() else table.verticalHeader().defaultSectionSize()
+            occupied = (margins.top() + margins.bottom() + dialog._action_footer.height() +
+                        table.horizontalHeader().height() + row_height + 4*dialog.layout().spacing())
+            height = min(group_height, max(142, dialog.height()-occupied-242))
+        else:
+            height = group_height
+        if scroll.height() != height or scroll.minimumHeight() != height:
+            scroll.setFixedHeight(height)
+
+    def schedule_edit_targets(self, *_):
+        if self.running and self.key == "edit_any" and not self._changing and not self._edit_layout_timer.isActive():
+            self._edit_layout_timer.start()
+
     def changed_any(self,*_):
+        self.schedule_edit_targets()
         if self.running and self.key=="edit_any" and not self._changing:self.update_confirm()
 
     def value_ready(self):
@@ -242,6 +308,9 @@ class GuidedTour(QObject):
             if key.startswith("admin_"):self.owner.tabs.setCurrentIndex(3)
             elif self.owner.tabs.isTabEnabled(0):self.owner.tabs.setCurrentIndex(0)
         title,text=LESSONS[key]
+        if self.host is self.editor and hasattr(self.editor, "course_form"):
+            self.fit_edit_form(self.editor)
+            self.editor.layout().activate()
         self.host.raise_();self.host.activateWindow()
         self.new_coach(self.host,title,text,key.startswith("admin_"),key in {"hours","boxes","weight","edit_any"})
         if hasattr(self.owner,"_publish_glass_state"):self.owner._publish_glass_state(force=True)
@@ -258,7 +327,7 @@ class GuidedTour(QObject):
         if self.picker is not None and self.picker.isVisible():
             listing=self.picker.list
             first=listing.visualItemRect(listing.item(0)) if listing.count() else listing.viewport().rect()
-            first.setWidth(min(260,first.width()))
+            first = first.intersected(listing.viewport().rect())
             box=self.picker.findChild(QDialogButtonBox)
             if box is not None and self.coach is not None:
                 button=box.button(QDialogButtonBox.Ok)
@@ -270,10 +339,51 @@ class GuidedTour(QObject):
             rect=table.visualItemRect(table.item(row,column))
             return QRect(table.viewport().mapTo(host,rect.topLeft()),rect.size())
         if key=="edit_any":
-            self.coach.extra_holes=[QRect(widget.mapTo(host,QPoint()),widget.size()) for widget in
-                (self.editor.order_date,self.editor.shift,self.editor.master,self.editor.department,self.editor.comment,
-                 self.editor.separate_worker_check,self.editor.add_employee_btn,self.editor.add_work_btn,self.editor.delete_row_btn)]
-            return QRect(self.editor.table.mapTo(host,QPoint()),self.editor.table.size())
+            editor = self.editor
+            self.fit_edit_form(editor)
+            editor.layout().activate()
+            table = editor.table
+            viewport = table.viewport()
+            self.coach.extra_holes = []
+            for widget in (editor.order_date, editor.shift, editor.master, editor.department, editor.comment,
+                           editor.separate_worker_check, editor.add_employee_btn, editor.add_work_btn, editor.delete_row_btn):
+                if widget.isVisible() and widget.isEnabled():
+                    rect = QRect(widget.mapTo(host, QPoint()), widget.size())
+                    if widget is editor.separate_worker_check:
+                        rect.setWidth(min(rect.width(), widget.sizeHint().width()))
+                    if editor.course_form.isAncestorOf(widget):
+                        viewport_form = editor.course_form.viewport()
+                        rect = rect.intersected(QRect(viewport_form.mapTo(host, QPoint()), viewport_form.size()))
+                    if not rect.isEmpty():
+                        self.coach.extra_holes.append(rect)
+            bar = editor.course_form.verticalScrollBar()
+            if bar.isVisible():
+                self.coach.extra_holes.append(QRect(bar.mapTo(host, QPoint()), bar.size()))
+            editable = []
+            employee = QRect()
+            first = max(0, table.rowAt(0))
+            last = table.rowAt(viewport.height()-1)
+            for row in range(first, last+1 if last >= first else table.rowCount()):
+                if editor._is_total(row):
+                    continue
+                for col in range(table.columnCount()):
+                    item = table.item(row, col)
+                    if item is None:
+                        continue
+                    rect = table.visualItemRect(item).intersected(viewport.rect())
+                    if rect.isEmpty():
+                        continue
+                    rect.moveTopLeft(viewport.mapTo(host, rect.topLeft()))
+                    if col == 0 and employee.isEmpty():
+                        employee = rect
+                    can_pick_work = col == 2 and not editor.separate_worker_check.isChecked()
+                    if item.flags() & Qt.ItemIsEnabled and (item.flags() & Qt.ItemIsEditable or can_pick_work):
+                        editable.append(rect)
+            self.coach.cell_holes = editable
+            if employee.isEmpty():
+                employee = QRect(editor.add_employee_btn.mapTo(host, QPoint()), editor.add_employee_btn.size())
+            self.coach.anchor = employee
+            return employee
         if key=="administration":
             bar=self.owner.tabs.tabBar();rect=bar.tabRect(3);return QRect(bar.mapTo(host,rect.topLeft()),rect.size())
         names={"create":"create_order_btn","edit":"edit_order_btn","date":"order_date","history":"info_panel","employees":"add_employee_btn","works":"add_work_btn",
@@ -294,7 +404,7 @@ class GuidedTour(QObject):
     def position_target(self):
         if not self.running or self.coach is None:return
         coach=self.coach;key=self.key
-        if self.host is self.owner and key in ("create","edit","history") and getattr(self.owner,"_glass_painted",False):
+        if coach.web and key in ("create","edit","history"):
             target={"create":"create","edit":"edit","history":"history-panel"}[key]
             script='(function(){var e=document.getElementById('+json.dumps(target)+');e.scrollIntoView({block:"nearest",inline:"nearest"});var r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height];})()'
             def got(bounds):
@@ -302,6 +412,11 @@ class GuidedTour(QObject):
                 origin=self.owner._glass.mapTo(self.owner,QPoint())
                 self.set_target(QRect(origin.x()+int(bounds[0]),origin.y()+int(bounds[1]),int(bounds[2]),int(bounds[3])))
             self.owner._glass.page().runJavaScript(script,got)
+        elif key in ("date","edit_any") and self.editor is not None and self.editor.order_date._popup.isVisible():
+            coach.cell_holes = []
+            coach.extra_holes = []
+            coach.anchor = QRect()
+            self.set_target(self.editor.order_date._popup.geometry())
         else:self.set_target(self.native_target())
 
     def set_target(self,rect):
@@ -334,6 +449,8 @@ class GuidedTour(QObject):
             self._ensure_data(seed=True)
             from .order_history import history_html
             self.clear_coach()
+            if hasattr(self.owner, "_publish_glass_state"):
+                self.owner._publish_glass_state()
             self.owner._apply_history_details((self.owner.workshop,history_html(self.db,self.demo_order["info"]["id"])))
             dialog=self.owner._history_details_dialog
             dialog.finished.connect(lambda result:self.queue_next())
@@ -343,17 +460,26 @@ class GuidedTour(QObject):
     def eventFilter(self,watched,event):
         if not self.running or self._confirming:return False
         kind=event.type()
+        if kind == QEvent.Wheel and self.key == "edit_any" and watched is self.coach:
+            scroll = self.editor.course_form
+            if scroll.viewport().rect().contains(scroll.viewport().mapFromGlobal(event.globalPos())):
+                bar = scroll.verticalScrollBar()
+                delta = event.pixelDelta().y() or event.angleDelta().y() / 120 * 3 * bar.singleStep()
+                bar.setValue(bar.value()-round(delta))
+                return True
+        if kind not in (QEvent.Show, QEvent.Hide, QEvent.Close, QEvent.MouseButtonPress,
+                        QEvent.MouseButtonRelease, QEvent.KeyPress):
+            return False
         if watched is self.owner and kind==QEvent.Close:self.finish();return False
         if kind==QEvent.Show and isinstance(watched,QDialog) and self.editor is not None:
             from .heavy_ui import EmployeeSelectionDialog,WorkSelectionDialog
             expected=EmployeeSelectionDialog if self.key=="employees" else WorkSelectionDialog if self.key=="works" else None
             if expected and isinstance(watched,expected):QTimer.singleShot(0,lambda dialog=watched:self.open_picker(dialog))
-        if isinstance(watched,QFrame) and watched.objectName()=="OrderCalendarPopup" and self.key=="date":
-            if kind==QEvent.Show:
-                def calendar_target(popup=watched):
-                    if self.running and self.key=="date" and popup.isVisible():self.set_target(popup.geometry());self.coach.raise_()
-                QTimer.singleShot(0,calendar_target)
-            elif kind==QEvent.Hide:QTimer.singleShot(0,self.position_target)
+        if isinstance(watched,QFrame) and watched.objectName()=="OrderCalendarPopup" and self.key in ("date", "edit_any"):
+            if kind in (QEvent.Show, QEvent.Hide):
+                QTimer.singleShot(0, self.position_target)
+                if self.coach is not None:
+                    self.coach.raise_()
         if kind==QEvent.MouseButtonRelease and self._eat_release:
             self._eat_release=False;return True
         if kind==QEvent.MouseButtonPress and hasattr(event,"globalPos") and event.button()==Qt.LeftButton:
@@ -362,11 +488,16 @@ class GuidedTour(QObject):
             if self.key in ("create","edit","history","administration") or self.key.startswith("admin_"):
                 if self.target.contains(event.globalPos()):
                     self._eat_release=True;QTimer.singleShot(0,self.click_target);return True
+        history_dialog = getattr(self.owner, "_history_details_dialog", None)
+        if self.key == "history" and self.coach is None and history_dialog is not None and not sip.isdeleted(history_dialog) and history_dialog.isVisible():
+            return False
         if kind==QEvent.KeyPress and event.key()==Qt.Key_Escape:
             if QApplication.activePopupWidget() is not None:return False
             if self.editor is not None and self.editor.order_date._popup.isVisible():return False
             self.request_finish();return True
         if kind==QEvent.KeyPress and isinstance(watched,QWidget) and watched.window() is self.owner:
+            if self.coach is not None and self.coach.web and self.owner._glass.isAncestorOf(watched):
+                return False
             on_card=self.coach is not None and (watched is self.coach.card or self.coach.card.isAncestorOf(watched))
             if not on_card and event.key()!=Qt.Key_F1:
                 if event.key() in (Qt.Key_Return,Qt.Key_Enter,Qt.Key_Space) and (self.key in ("create","edit","history","administration") or self.key.startswith("admin_")):
@@ -389,8 +520,6 @@ class GuidedTour(QObject):
         for layer in self.layers.values():
             if not sip.isdeleted(layer):layer.hide();layer.deleteLater()
         self.layers.clear()
-        if getattr(self.owner,"_glass",None) is not None:
-            self.owner._glass.page().runJavaScript("window.SmartOrderCoach&&window.SmartOrderCoach.hide()")
         if self.picker is not None and not sip.isdeleted(self.picker):self.picker.reject()
         if self.editor is not None and not sip.isdeleted(self.editor):self.editor.reject();self.editor.deleteLater()
         if self.temp is not None:self.temp.cleanup()

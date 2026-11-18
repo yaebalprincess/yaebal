@@ -342,7 +342,10 @@ NEW_DATA='''Учётная запись отключена. Войдите за�
 У вас нет несохранённых черновиков.|You have no unsaved drafts.|No tienes borradores sin guardar.|Сақталмаған нобайларыңыз жоқ.|Vous n’avez aucun brouillon non enregistré.|Sie haben keine ungespeicherten Entwürfe.|未保存の下書きはありません。|Сакланмаган караламаларыгыз юк.'''
 
 NEW_DATA+='''
-Сменить аккаунт|Switch account|Cambiar de cuenta|Аккаунтты ауыстыру|Changer de compte|Konto wechseln|アカウントを切り替える|Аккаунтны алыштыру
+Сменить пользователя|Switch user|Cambiar de usuario|Пайдаланушыны ауыстыру|Changer d’utilisateur|Benutzer wechseln|ユーザーを切り替える|Кулланучыны алыштыру
+Обучение|Training|Formación|Оқыту|Formation|Schulung|研修|Өйрәнү
+Обучение пройдено|Training completed|Formación completada|Оқыту аяқталды|Formation terminée|Schulung abgeschlossen|研修修了|Өйрәнү тәмамланды
+Обучение не пройдено|Training not completed|Formación pendiente|Оқыту аяқталмаған|Formation non terminée|Schulung ausstehend|研修未修了|Өйрәнү тәмамланмаган
 Вы уверены, что хотите выйти из аккаунта?|Are you sure you want to sign out?|¿Seguro que quieres cerrar sesión?|Аккаунттан шығуға сенімдісіз бе?|Voulez-vous vraiment vous déconnecter ?|Möchten Sie sich wirklich abmelden?|アカウントからログアウトしますか？|Аккаунттан чыгарга телисезме?
 Выйти из текущего аккаунта и открыть окно авторизации|Sign out and open the sign-in window|Cerrar sesión y abrir el acceso|Аккаунттан шығып, кіру терезесін ашу|Se déconnecter et ouvrir la connexion|Abmelden und Anmeldung öffnen|ログアウトしてログイン画面を開く|Аккаунттан чыгып, керү тәрәзәсен ачу
 Столбцы по умолч.|Default columns|Columnas predeterminadas|Әдепкі бағандар|Colonnes par défaut|Standardspalten|列を初期設定に戻す|Башлангыч баганалар'''

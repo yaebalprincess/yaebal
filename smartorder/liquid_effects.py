@@ -206,6 +206,11 @@ class PageTransition(QWidget):
         painter.drawPixmap(self.rect(), self.snapshot)
 
 
+_POINTER_EVENTS = frozenset((QEvent.Enter, QEvent.Leave, QEvent.MouseMove,
+                             QEvent.MouseButtonPress, QEvent.MouseButtonRelease, QEvent.KeyPress))
+_SURFACE_EVENTS = frozenset((QEvent.Polish, QEvent.Show, QEvent.Hide, QEvent.Move,
+                             QEvent.WindowStateChange, QEvent.Resize, QEvent.Paint, QEvent.DynamicPropertyChange))
+
 class LiquidController(QObject):
     def __init__(self, app):
         super().__init__(app)
@@ -361,17 +366,28 @@ class LiquidController(QObject):
                 or widget.objectName() in {"NotificationPopup", "RC5InfoPopup"})
 
     def eventFilter(self, widget, event):
+        # Most GUI events (including repaints during an animation) need no
+        # glass work. Don't traverse their parent chains on the GUI thread.
+        kind = event.type()
+        if kind in _POINTER_EVENTS:
+            if not isinstance(widget, QAbstractButton):
+                return False
+        elif kind not in _SURFACE_EVENTS:
+            return False
+        if kind == QEvent.Paint and not isinstance(widget, QMenu):
+            return False
+        if kind == QEvent.DynamicPropertyChange and event.propertyName() != b"theme":
+            return False
         if not isinstance(widget, QWidget) or isinstance(widget, (GlassBackdrop, LiveGlassBackdrop, ControlLight, PageTransition)) or legacy_surface(widget):
             return False
-        kind = event.type()
         window = widget.window()
         from .help_surface import plain_surface
         if isinstance(window, NATIVE_DIALOGS) or plain_surface(widget):
             return False
-        overlay = self.is_overlay(widget)
-        if kind == QEvent.Polish and overlay:
+        if kind == QEvent.Polish and self.is_overlay(widget):
             prepare_overlay(widget)
         if kind == QEvent.Show:
+            overlay = self.is_overlay(widget)
             from .i18n import apply_widget, apply_language
             apply_language(widget) if overlay else apply_widget(widget)
             if overlay:
@@ -409,7 +425,7 @@ class LiquidController(QObject):
         if isinstance(widget, QAbstractButton) and not isinstance(widget, QTabBar):
             if not widget.isEnabled() or widget.objectName() in {"WindowControl", "WindowClose"}:
                 return False
-            if kind in (QEvent.Enter, QEvent.Leave, QEvent.MouseMove, QEvent.MouseButtonPress, QEvent.MouseButtonRelease, QEvent.KeyPress):
+            if kind in _POINTER_EVENTS:
                 light = self.lights.get(widget)
                 if light is None:
                     light = ControlLight(widget)

@@ -114,7 +114,7 @@ class WorkshopPopup(QFrame):
         header=QLabel(owner.user.username+" · "+" · ".join(tr(role) for role in owner.user.roles));header.setWordWrap(True);header.setMinimumWidth(0);header_row.addWidget(header,1)
         self.switch_account_button=QToolButton(self)
         self.switch_account_button.setObjectName("SwitchAccountButton")
-        self.switch_account_button.setText(tr("Сменить аккаунт"))
+        self.switch_account_button.setText(tr("Сменить пользователя"))
         self.switch_account_button.setIcon(symbol_icon("switch_account",owner.ui_settings.theme))
         self.switch_account_button.setIconSize(QSize(18,18))
         self.switch_account_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)

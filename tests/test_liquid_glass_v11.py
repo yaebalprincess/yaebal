@@ -235,6 +235,8 @@ def test_master_follows_clicks_through_order_history_and_admin(system,app,monkey
             next(button for button in tour.coach.card.findChildren(QPushButton) if button.text()=="Далее").click()
             app.processEvents()
         assert {"admin_sync","admin_audit","admin_backup"}.issubset(seen)
+        master = next(r for r in manager.auth.list_users() if r["id"] == user.id)
+        assert master["training_completed_at"]
         assert manager.database("packaging",user).list_orders()==[]
         assert not list(local_drafts_dir().rglob("*.json"))
         assert not list(manager.root.rglob("new_order*.json"))

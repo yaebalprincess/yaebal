@@ -227,11 +227,12 @@ def prepare_overlay(widget):
     """Run before the native handle is shown so alpha works on Windows."""
     if widget.property("glassOverlay"): return
     widget.setProperty("glassOverlay", True)
+    alpha = not isinstance(widget, QMessageBox) or bool(widget.property("smoothGlassCorners"))
     if not widget.isVisible():
         widget.setWindowFlag(Qt.FramelessWindowHint, True)
-        widget.setAttribute(Qt.WA_TranslucentBackground, not isinstance(widget, QMessageBox))
-    widget.setAttribute(Qt.WA_NoSystemBackground, not isinstance(widget, QMessageBox))
-    widget.setAutoFillBackground(isinstance(widget, QMessageBox))
+        widget.setAttribute(Qt.WA_TranslucentBackground, alpha)
+    widget.setAttribute(Qt.WA_NoSystemBackground, alpha)
+    widget.setAutoFillBackground(not alpha)
 
 
 def attach_overlay(widget):
@@ -262,7 +263,9 @@ def update_overlay_geometry(widget):
     layer = getattr(widget, "_liquid_backdrop", None)
     if layer is not None: layer.setGeometry(widget.rect())
     radius = 0 if widget.isMaximized() or widget.isFullScreen() else 20
-    if radius:
+    # Alpha-composited questions use the smooth edge painted by the glass
+    # backdrop. A native integer window region would quantize that edge.
+    if radius and not (isinstance(widget, QMessageBox) and widget.testAttribute(Qt.WA_TranslucentBackground)):
         path = QPainterPath();path.addRoundedRect(QRectF(widget.rect()),radius,radius)
         widget.setMask(QRegion(path.toFillPolygon().toPolygon()))
     else: widget.clearMask()

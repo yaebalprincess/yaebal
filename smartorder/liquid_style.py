@@ -163,6 +163,7 @@ QLabel#DbStateBad {{ color:#e44f67; font-weight:700; }}
     qss+=f'QComboBox::down-arrow{{image:url("{arrow_down}");width:12px;height:8px;}}QAbstractSpinBox::up-arrow{{image:url("{arrow_up}");width:10px;height:7px;}}QAbstractSpinBox::down-arrow{{image:url("{arrow_down}");width:10px;height:7px;}}QAbstractSpinBox::up-button,QAbstractSpinBox::down-button{{background:rgba(101,168,227,35);border:0;width:20px;border-radius:4px;}}'
     from .appearance import typography_qss
     qss += '''
+QMessageBox[smoothGlassCorners="true"][glassOverlay="true"]{background:transparent;border:none;}
 QMenu[glassOverlay="true"]{background:rgba(242,250,255,30);}
 QMenu[glassOverlay="true"][theme="dark"]{background:rgba(18,35,55,30);}
 QWidget[glassOverlay="true"] QScrollArea{background:transparent;}

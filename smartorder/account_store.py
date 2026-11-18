@@ -1,7 +1,7 @@
 """Account options and portable preferences in the shared identity database."""
 import json
 from datetime import datetime
-from .security import ALL_PERMISSIONS, Permission, SessionUser, split_roles
+from .security import ALL_PERMISSIONS, Permission, SessionUser, WORKSHOP_ROLES, split_roles
 
 UNSET = object()
 
@@ -10,16 +10,35 @@ def ensure_accounts(db):
     if getattr(db, "_account_schema_ready", False):
         return
     with db.read_conn() as conn:
-        marker = conn.execute("SELECT value FROM db_meta WHERE key='account_options_v7'").fetchone()
+        marker = conn.execute("SELECT value FROM db_meta WHERE key='master_training_v13'").fetchone()
     if not marker:
         with db.write_conn() as conn:
             conn.execute("CREATE TABLE IF NOT EXISTS account_options(user_id INTEGER PRIMARY KEY, permissions_json TEXT, activate_at TEXT, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_account_activation ON account_options(activate_at)")
             conn.execute("CREATE TABLE IF NOT EXISTS user_personalization(user_id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0, payload TEXT NOT NULL DEFAULT '{}', updated_at TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)")
-            for row in conn.execute("SELECT id,role FROM users WHERE role LIKE '%Аналитик%'").fetchall():
-                conn.execute("UPDATE users SET role=? WHERE id=?", (";".join(split_roles(row[1])), row[0]))
-            conn.execute("INSERT OR REPLACE INTO db_meta(key,value) VALUES('account_options_v7','1')")
+            if not conn.execute("SELECT 1 FROM db_meta WHERE key='account_options_v7'").fetchone():
+                for row in conn.execute("SELECT id,role FROM users WHERE role LIKE '%Аналитик%'").fetchall():
+                    conn.execute("UPDATE users SET role=? WHERE id=?", (";".join(split_roles(row[1])), row[0]))
+                conn.execute("INSERT INTO db_meta(key,value) VALUES('account_options_v7','1')")
+            conn.execute("""CREATE TABLE IF NOT EXISTS master_training(
+                user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                completed_at TEXT NOT NULL)""")
+            conn.execute("INSERT OR IGNORE INTO db_meta(key,value) VALUES('master_training_v13','1')")
     db._account_schema_ready = True
+
+
+def complete_master_training(db, actor):
+    """One completion per signed-in master, shared across all workshops."""
+    ensure_accounts(db)
+    with db.write_conn() as conn:
+        validate_actor(db, actor, conn=conn)
+        if actor.id <= 0 or not WORKSHOP_ROLES.keys() & set(actor.roles):
+            return
+        write = conn.execute("""INSERT INTO master_training(user_id,completed_at) VALUES(?,?)
+                                ON CONFLICT(user_id) DO NOTHING""",
+                             (actor.id, datetime.now().isoformat(timespec="seconds")))
+        if write.rowcount:
+            db._audit_conn(conn, actor.username, "Прошёл обучение", "Пользователь", actor.username, "")
 
 
 def normalized_permissions(value):

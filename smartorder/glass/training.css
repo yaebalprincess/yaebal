@@ -1,10 +1,10 @@
-#training-layer{position:fixed;inset:0;z-index:10000;pointer-events:none;font-family:"Segoe UI",Arial,sans-serif;font-size:16px;line-height:1.5;}
-.training-veil{position:absolute;background:rgba(5,17,32,.57);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);pointer-events:auto;}
+#training-layer{position:fixed;top:0;right:0;bottom:0;left:0;z-index:10000;pointer-events:none;font-family:"Segoe UI",Arial,sans-serif;font-size:16px;line-height:1.5;}
+.training-veil{position:absolute;top:0;right:0;bottom:0;left:0;background:rgba(5,17,32,.57);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);pointer-events:auto;}
 html[data-theme="dark"] .training-veil{background:rgba(5,17,32,.64);}
-.training-spotlight,.training-row-highlight{position:absolute;border:2px solid #69bdff;border-radius:10px;box-shadow:0 0 0 3px #a9dcff52;pointer-events:none;}
+.training-spotlight,.training-row-highlight{position:absolute;border:2px solid #69bdff;border-radius:10px;box-sizing:border-box;pointer-events:none;}
 .training-row-highlight{border-radius:4px;background:#63b4ff18;}
-.training-step-number{position:absolute;left:4px;top:-28px;display:grid;place-items:center;width:34px;height:34px;border-radius:50%;border:2px solid #c2e8ff;background:#087bfa;color:#fff;font-size:16px;font-weight:700;}
-.training-step-number::before,.training-step-number::after{content:"";position:absolute;inset:-4px;border:2px solid #81caff;border-radius:50%;animation:training-wave 2.4s ease-out infinite;}
+.training-step-number{position:absolute;z-index:4;pointer-events:none;display:grid;place-items:center;width:34px;height:34px;border-radius:50%;border:2px solid #c2e8ff;background:#087bfa;color:#fff;font-size:16px;font-weight:700;}
+.training-step-number::before,.training-step-number::after{content:"";position:absolute;top:-4px;right:-4px;bottom:-4px;left:-4px;border:2px solid #81caff;border-radius:50%;animation:training-wave 2.4s ease-out infinite;}
 .training-step-number::after{animation-delay:1.2s;}
 @keyframes training-wave{from{transform:scale(.9);opacity:.65;}to{transform:scale(1.9);opacity:0;}}
 .training-card{position:absolute;z-index:3;display:flex;flex-direction:column;gap:16px;padding:20px;border:1px solid #ffffffee;border-radius:16px;background:linear-gradient(130deg,#f6fcfff2,#dbefffe8);color:#102b50;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:0 12px 36px #001c3b45,inset 0 1px 0 #fff;pointer-events:auto;overflow:hidden;}

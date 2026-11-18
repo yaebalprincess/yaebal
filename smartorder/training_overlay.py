@@ -1,6 +1,4 @@
 """Frosted training surfaces with a separate, compositor-safe web spotlight."""
-import json
-
 from PyQt5 import sip
 from PyQt5.QtCore import QEvent, QPoint, QRect, QRectF, Qt, QTimer, QVariantAnimation
 from PyQt5.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QRegion
@@ -10,12 +8,12 @@ from PyQt5.QtWidgets import (QDialog, QFrame, QHBoxLayout, QLabel, QPushButton,
 from .help_surface import tutorial_style
 
 
-def blurred_frame(frame):
+def blurred_frame(frame, scale=14):
     if frame.isNull():
         return QPixmap()
     ratio = frame.devicePixelRatioF()
     image = frame.toImage()
-    small = image.scaled(max(1, image.width()//14), max(1, image.height()//14),
+    small = image.scaled(max(1, image.width()//scale), max(1, image.height()//scale),
                          Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
     result = QPixmap.fromImage(small.scaled(image.size(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation))
     result.setDevicePixelRatio(ratio)
@@ -115,43 +113,98 @@ class CoachOverlay(QFrame):
         self.title, self.text, self.number, self.total = title, text, number, total
         self.dark = tour.owner.ui_settings.theme == "dark"
         self.phase = 0.0; self.extra_holes = []; self.active = True
-        self.web = bool(host is tour.owner and getattr(host, "_glass_painted", False)
-                        and host.tabs.currentIndex() == 0)
+        self.anchor = QRect()
+        self.cell_holes = []
+        self.web = bool(host is tour.owner and getattr(host, "_glass", None) is not None
+                        and not host._glass_error and host.tabs.currentIndex() == 0)
         self.setProperty("plainSurface", True)
         self.setObjectName("ClickTrainingOverlay")
         self.setAttribute(Qt.WA_NoSystemBackground, True)
         self.setAutoFillBackground(False)
         self.setStyleSheet("QFrame#ClickTrainingOverlay{background:transparent;border:0;}")
+        self.gutters = []
+        if self.web:
+            # Three thin siblings shade the native margins without crossing
+            # the web view or occluding its compositor.
+            for _ in range(3):
+                gutter = QWidget(host)
+                gutter.setProperty("plainSurface", True)
+                gutter.setAttribute(Qt.WA_TransparentForMouseEvents)
+                gutter.setStyleSheet("background:rgba(5,17,32,%d);" % (163 if self.dark else 145))
+                self.gutters.append(gutter)
+                self.destroyed.connect(gutter.deleteLater)
+            host._glass.installEventFilter(self)
         self.setGeometry(self.host_bounds())
-        self.background = QPixmap() if self.web else blurred_frame(host.grab())
+        self.place_gutters()
+        self.background = QPixmap() if self.web else blurred_frame(host.grab(), scale=7)
+        self._sampling = False
+        self._sample_geometry = None
+        self.sample_timer = QTimer(self)
+        self.sample_timer.setSingleShot(True)
+        self.sample_timer.setInterval(32)
+        self.sample_timer.timeout.connect(self.resample)
         self.card = TrainingCard(self, title, text, number, total, informational, confirm)
         self.card.hide()
+        self.shade = QPainterPath()
+        self.shade.addRect(QRectF(self.rect()))
         self.animation = QVariantAnimation(self); self.animation.setDuration(1800)
         self.animation.setStartValue(0.0); self.animation.setEndValue(1.0); self.animation.setLoopCount(-1)
         self.animation.valueChanged.connect(self._pulse)
         host.installEventFilter(self)
-        self.show(); self.raise_(); self.animation.start()
+        self.show(); self.raise_()
+
+    def resample(self):
+        if self.web or not self.isVisible():
+            return
+        # Render the now-settled layout without including the coach itself.
+        # Restore the card in the same event turn, before any on-screen paint.
+        self._sampling = True
+        visible = self.card.isVisible()
+        focused = self.window().focusWidget()
+        if focused is not None and not self.card.isAncestorOf(focused):
+            focused = None
+        try:
+            if visible:
+                self.card.hide()
+            self.background = blurred_frame(self.host.grab(), scale=7)
+        finally:
+            self._sampling = False
+            if visible:
+                self.card.show()
+                if focused is not None and not sip.isdeleted(focused):
+                    focused.setFocus(Qt.OtherFocusReason)
+            self.update()
 
     def _pulse(self, value):
-        self.phase = float(value); self.update()
+        self.phase = float(value)
+        center = self.badge_center()
+        self.update(QRect(center.x()-38, center.y()-38, 76, 76))
 
-    def web_config(self, passive=False):
+    def web_config(self):
         targets = {"create":"#create", "edit":"#edit", "history":"#history-panel"}
         web=self.web_rect()
         return {"title":self.title, "text":self.text, "number":self.number,
                 "total":self.total, "target":targets.get(self.tour.key, ""),
                 "external":self.tour.key=="administration",
                 "anchor":[self.target.x()-web.x(),0,self.target.width(),0],
-                "action":self.tour.key, "row":self.tour.key=="edit", "passive":passive}
-
-    def publish_web(self, passive=False):
-        if self.web and not sip.isdeleted(self.tour.owner._glass):
-            encoded = json.dumps(self.web_config(passive), ensure_ascii=False)
-            self.tour.owner._glass.page().runJavaScript("window.SmartOrderCoach&&window.SmartOrderCoach.show("+encoded+")")
+                "action":self.tour.key, "row":self.tour.key=="edit", "passive":not self.active}
 
     def web_rect(self):
         view = self.tour.owner._glass
         return QRect(view.mapTo(self.host, QPoint()), view.size())
+
+    def place_gutters(self):
+        if not self.gutters:
+            return
+        web = self.web_rect()
+        width, height = self.host.width(), self.host.height()
+        rects = (QRect(0, web.top(), web.left(), web.height()),
+                 QRect(web.right()+1, web.top(), width-web.right()-1, web.height()),
+                 QRect(0, web.bottom()+1, width, height-web.bottom()-1))
+        for gutter, rect in zip(self.gutters, rects):
+            gutter.setGeometry(rect)
+            gutter.setVisible(not rect.isEmpty())
+            gutter.raise_()
 
     def host_bounds(self):
         # A QWidget over the WebEngine rectangle can occlude Chromium's
@@ -161,64 +214,128 @@ class CoachOverlay(QFrame):
             return QRect(0,0,self.host.width(),max(1,self.web_rect().top()))
         return self.host.rect()
 
+    def holes(self):
+        return [r for r in [self.target, *self.extra_holes, *self.cell_holes] if not r.isEmpty()]
+
+    def shape(self, rect, inset=0):
+        bounds = QRectF(rect).adjusted(inset, inset, -inset, -inset)
+        path = QPainterPath()
+        if bounds.isEmpty():
+            return path
+        is_cell = rect in self.cell_holes or (
+            rect == self.target and self.tour.key in ("hours", "boxes", "weight", "edit_any"))
+        radius = min(2 if is_cell else 9, bounds.height()/2, bounds.width()/2)
+        path.addRoundedRect(bounds, radius, radius)
+        return path
+
+    def badge_center(self):
+        return QPoint(max(20, min(self.target.left()+12, self.width()-20)),
+                      max(20, min(self.target.top()-16, self.height()-20)))
+
     def apply_mask(self):
+        # Only the *interior* needs a binary input hole. Leave the rounded rim
+        # and the number on the painted surface for subpixel antialiasing.
         mask = QRegion(self.rect())
-        holes = ([self.web_rect(),self.target] if self.web else [self.target, *self.extra_holes])
-        for hole in holes:
-            if not hole.isEmpty(): mask = mask.subtracted(QRegion(hole))
+        self.shade = QPainterPath()
+        self.shade.addRect(QRectF(self.rect()))
+        for hole in self.holes():
+            self.shade = self.shade.subtracted(self.shape(hole))
+            core = self.shape(hole, 2).toFillPolygon().toPolygon()
+            mask -= QRegion(core)
         if not self.web and self.active:
-            mask = mask.united(QRegion(self.card.geometry()))
+            mask |= QRegion(self.card.geometry())
         self.setMask(mask)
 
     def highlight(self, rect):
         self.target = rect.intersected(self.host.rect() if self.web else self.rect())
         if self.web:
-            self.card.hide(); self.publish_web(); self.apply_mask(); return
-        width = min(480, self.width()-32)
-        self.card.fit(width, max(160, self.height()-32))
+            self.card.hide()
+            if self.tour.key == "administration":
+                self.tour.owner._publish_glass_state()
+            self.apply_mask()
+        else:
+            self.place_card()
+            self.apply_mask()
+            geometry = (self.size(), self.holes())
+            if geometry != self._sample_geometry:
+                self._sample_geometry = geometry
+                self.sample_timer.start()
+        if not self.web or self.tour.key == "administration":
+            if self.animation.state() != self.animation.Running:
+                self.animation.start()
+        self.update()
+
+    def place_card(self):
+        anchor = self.anchor if self.anchor.isValid() else self.target
+        margin, gap = 12, 12
+        width = min(480, self.width()-2*margin)
+        max_height = self.height()-2*margin
+        below = self.height()-margin-anchor.bottom()-gap
+        if self.anchor.isValid():
+            footer = self.host._action_footer
+            below = min(below, footer.mapTo(self.host, QPoint()).y()-anchor.bottom()-2*gap)
+        if self.anchor.isValid() and below >= 140:
+            max_height = min(max_height, below)
+        self.card.fit(width, max(110, max_height))
         height = self.card.height()
-        candidates = [QPoint(self.target.left(), self.target.bottom()+18),
-                      QPoint(self.target.right()+18, self.target.top()),
-                      QPoint(self.target.left(), self.target.top()-height-18),
-                      QPoint(self.target.left()-width-18, self.target.top())]
-        def fit(point):
-            return QPoint(max(16, min(point.x(), self.width()-width-16)),
-                          max(16, min(point.y(), self.height()-height-16)))
-        def overlap(point):
-            r = self.target.intersected(QRect(point, self.card.size()))
-            return r.width()*r.height()
-        best = min((fit(p) for p in candidates), key=overlap)
-        self.card.move(best); self.card.show(); self.card.raise_()
-        self.apply_mask(); self.update()
+        candidates = [QPoint(anchor.left(), anchor.bottom()+gap),
+                      QPoint(anchor.right()+gap, anchor.top()),
+                      QPoint(anchor.left(), anchor.top()-height-gap),
+                      QPoint(anchor.left()-width-gap, anchor.top())]
+        def fit(p):
+            return QPoint(max(margin, min(p.x(), self.width()-self.card.width()-margin)),
+                          max(margin, min(p.y(), self.height()-height-margin)))
+        def overlap(p):
+            area = QRect(p, self.card.size())
+            return sum(r.width()*r.height() for hole in self.holes()
+                       for r in [area.intersected(hole)] if not r.isEmpty())
+        self.card.move(min(map(fit, candidates), key=overlap))
+        self.card.show()
+        self.card.raise_()
 
     def passive(self):
-        self.active = False; self.target = QRect(); self.extra_holes = []
-        self.card.hide(); self.animation.stop(); self.publish_web(True)
-        self.apply_mask(); self.raise_(); self.update()
+        self.active = False
+        self.target = QRect()
+        self.extra_holes = []
+        self.cell_holes = []
+        self.card.hide()
+        self.animation.stop()
+        self.apply_mask()
+        self.raise_()
+        self.update()
 
     def eventFilter(self, watched, event):
         if event.type() in (QEvent.Resize, QEvent.Move):
             self.setGeometry(self.host_bounds())
+            self.place_gutters()
             if self.active:QTimer.singleShot(0, self.tour.position_target)
             else:self.apply_mask();self.update()
         return False
 
     def hideEvent(self, event):
-        self.animation.stop(); super().hideEvent(event)
+        for gutter in self.gutters:
+            if not sip.isdeleted(gutter):
+                gutter.hide()
+        self.animation.stop()
+        super().hideEvent(event)
 
     def paintEvent(self, event):
+        if self._sampling:
+            return
         painter = QPainter(self); painter.setRenderHint(QPainter.Antialiasing)
-        shade = QPainterPath(); shade.setFillRule(Qt.OddEvenFill); shade.addRect(QRectF(self.rect()))
-        for hole in [self.target, *self.extra_holes]:
-            if not hole.isEmpty(): shade.addRect(QRectF(hole))
-        painter.save(); painter.setClipPath(shade)
+        # Masked cores expose the live controls. Both the shade and the
+        # outline follow the very same contour, without an intervening gutter.
+        painter.save()
+        painter.setClipPath(self.shade)
         if not self.background.isNull(): painter.drawPixmap(self.rect(), self.background)
         painter.fillRect(self.rect(), QColor(5, 17, 32, 163 if self.dark else 145))
         painter.restore()
-        if self.target.isEmpty() or not self.active or self.web and self.web_rect().contains(self.target): return
+        if self.target.isEmpty() or not self.active or (self.web and self.tour.key != "administration"):
+            return
         painter.setPen(QPen(QColor("#62bcff"), 2))
-        painter.drawRoundedRect(QRectF(self.target.adjusted(-3, -3, 3, 3)), 10, 10)
-        center = QPoint(max(24, min(self.target.left()+10, self.width()-25)), max(26, self.target.top()-13))
+        for hole in self.holes():
+            painter.drawPath(self.shape(hole, 1))
+        center = self.badge_center()
         painter.setBrush(Qt.NoBrush)
         for offset in (0.0, .5):
             phase = (self.phase+offset)%1

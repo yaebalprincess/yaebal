@@ -2,6 +2,12 @@
 (() => {
   const $ = id => document.getElementById(id);
   let state = null, transport = null, selected = null;
+  let themeRevision = -1;
+  function applyTheme(theme, revision) {
+    if (revision < themeRevision) return;
+    themeRevision = revision;
+    document.documentElement.dataset.theme = theme;
+  }
   let rowSignature = "", historySignature = "", tabSignature = "";
   let toastTimer, lastZoom = 100;
   const rowNodes = new Map();
@@ -114,7 +120,7 @@
     $("drafts-title").textContent = t("Ваши черновики");
     $("all-orders").textContent = t("Все наряды");
     document.querySelector(".filters-scroll").hidden = state.draftView;
-    document.documentElement.dataset.theme = state.theme;
+    applyTheme(state.theme, state.themeRevision || 0);
     document.documentElement.dataset.embedded = state.embedded ? "true" : "false";
     const fonts = state.appearance && state.appearance.fonts || {};
     const fontsKey=JSON.stringify(fonts);
@@ -190,8 +196,14 @@
     document.querySelector(".history-panel").classList.toggle("restricted",!state.canHistory);
     $("table-panel").setAttribute("aria-busy", state.busy ? "true" : "false");
     window.GlassPopovers.update(state, send);
-    document.documentElement.dataset.ready="true";
-    send("painted");
+    if (window.SmartOrderCoach) {
+      if (state.lesson) window.SmartOrderCoach.show(state.lesson);
+      else window.SmartOrderCoach.hide();
+    }
+    if (document.documentElement.dataset.ready !== "true") {
+      document.documentElement.dataset.ready = "true";
+      send("painted");
+    }
   }
   function updateZoom(value) {
     $("zoom-value").textContent = value + "%";
@@ -273,7 +285,7 @@
   });
   // Also used by the local screenshot/interaction checks. No sample records
   // or fake account are loaded by the production page.
-  window.SmartOrderView = Object.freeze({render, command:send, bindTransport(callback) { transport = callback; }});
+  window.SmartOrderView = Object.freeze({render, applyTheme, command:send, bindTransport(callback) { transport = callback; }});
   if (window.qt && window.qt.webChannelTransport && typeof QWebChannel !== "undefined") {
     new QWebChannel(window.qt.webChannelTransport, channel => {
       const bridge = channel.objects.orders;

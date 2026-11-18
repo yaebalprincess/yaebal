@@ -361,7 +361,19 @@ class MainWindow(RC18MainWindow):
         try:
             for i,r in enumerate(rows):
                 uid,username,role,active=int(r[0]),str(r[1]),";".join(split_roles(r[2])),bool(r[3])
-                self.users_table.setItem(i,0,heavy_ui.make_item(username,uid));self.users_table.setItem(i,1,heavy_ui.make_item(role));self.users_table.setItem(i,2,heavy_ui.make_item(('Активируется '+str(r[4]).replace('T',' ')) if len(r)>4 and r[4] else ('Активен' if active else 'Отключён')))
+                self.users_table.setItem(i, 0, heavy_ui.make_item(username, uid))
+                self.users_table.setItem(i, 1, heavy_ui.make_item(role))
+                status = tr('Активен' if active else 'Отключён')
+                if len(r) > 4 and r[4]:
+                    status = tr('Активируется') + ' ' + str(r[4]).replace('T', ' ')
+                item = heavy_ui.make_item(status)
+                if WORKSHOP_ROLES.keys() & set(split_roles(role)):
+                    complete = len(r) > 6 and bool(r[6])
+                    item.setText(status + "\n" + tr("Обучение") + ("  ■" if complete else "  □"))
+                    description = tr("Обучение пройдено" if complete else "Обучение не пройдено")
+                    item.setToolTip(description)
+                    item.setData(Qt.AccessibleTextRole, status + ". " + description)
+                self.users_table.setItem(i, 2, item)
                 target=frozenset(json.loads(r[5])) if len(r)>5 and r[5] is not None else self.workshop_manager.auth.role_permissions(role)
                 can_manage=admin and (self.can(Permission.PERMISSIONS_MANAGE) or target<=self.user.permissions)
                 host=QWidget();host.setProperty("targetPermissions",list(target));host.setProperty("hasManagementHandlers",can_manage)
@@ -1271,7 +1283,7 @@ class MainWindow(RC18MainWindow):
         if menu is not None:menu.hide()
         self._account_switch_prompt=True
         try:
-            answer=heavy_ui.question(self,"Сменить аккаунт","Вы уверены, что хотите выйти из аккаунта?")
+            answer=heavy_ui.question(self,"Сменить пользователя","Вы уверены, что хотите выйти из аккаунта?")
         finally:self._account_switch_prompt=False
         if answer==QMessageBox.Yes:self.accountSwitchRequested.emit()
 

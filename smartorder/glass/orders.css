@@ -299,6 +299,27 @@ html[data-theme="dark"] .calendar-footer .calendar-apply { background: linear-gr
 /* v4: the native shell owns the single title bar, scale and tab navigation. */
 html[data-embedded="true"], html[data-embedded="true"] body { background-color:#dcebf7; }
 html[data-embedded="true"][data-theme="dark"],html[data-embedded="true"][data-theme="dark"] body{background-color:#15273e;}
+/* The same full-window image, crop and diagonal tint as the Qt backdrop.
+   Only the gradient changes when switching theme. */
+html[data-embedded="true"] body {
+  isolation: isolate;
+  --shell-art: url("assets/factory-glass.png");
+  --shell-tint: linear-gradient(var(--shell-angle, 130deg), rgba(238,249,255,.620),
+                                rgba(216,236,253,.502) 48%, rgba(231,243,255,.573));
+}
+html[data-embedded="true"][data-theme="dark"] body {
+  --shell-tint: linear-gradient(var(--shell-angle, 130deg), rgba(15,30,51,.855),
+                                rgba(18,41,66,.824) 48%, rgba(22,40,64,.863));
+}
+html[data-embedded="true"] body::before {
+  content: "";
+  position: fixed;
+  left: var(--shell-left, 0); top: var(--shell-top, 0);
+  width: var(--shell-width, 100%); height: var(--shell-height, 100%);
+  background-image: var(--shell-tint), var(--shell-art);
+  background-position: center; background-size: cover; background-repeat: no-repeat;
+  pointer-events: none; z-index: -1;
+}
 html[data-embedded="true"] .app-shell { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; min-height: 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
 html[data-embedded="true"] .app-shell::after { display: none; }
 html[data-embedded="true"] .titlebar, html[data-embedded="true"] .scale-toolbar, html[data-embedded="true"] .tabs, html[data-embedded="true"] .resize-corner { display: none; }
